@@ -97,7 +97,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    description="智能体（agent）系统",
+    description="校务 AI 自动数据采集与知识管理中台",
     version="1.0.0",
     lifespan=lifespan,
 )

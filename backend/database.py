@@ -61,20 +61,20 @@ AsyncSessionLocal = _create_sessionmaker(engine)
 def _build_default_agent(workspace_id: int):
     from models import Agent
 
-    raw_api_key = settings.deepseek_api_key
+    raw_api_key = settings.dashscope_api_key or settings.deepseek_api_key
 
     return Agent(
         id=settings.default_agent_id,
         workspace_id=workspace_id,
-        name="AI Agent",
-        description="Default AI Customer Service Agent",
-        system_prompt="You are a helpful customer service assistant.",
-        model="deepseek-v4-flash",
+        name="校务智汇助手",
+        description="校务知识问答助手（通知公告/规章制度/办事流程/教务学籍/后勤生活/就业创业/科研学术）",
+        system_prompt="你是「校务智汇中台」的智能助手，面向高校师生与管理人员，基于校务知识库回答通知公告、规章制度、办事流程、教务学籍、后勤生活、就业创业、科研学术等问题。回答必须基于检索到的知识内容并附来源引用；若知识库无相关内容，诚实告知未找到并给出建议，绝不编造。",
+        model="qwen-plus",
         temperature=0.7,
         max_tokens=DEFAULT_AGENT_MAX_TOKENS,
         api_key=encrypt_api_key(raw_api_key) if raw_api_key else "",
-        api_base="https://api.deepseek.com/v1",
-        provider_type="deepseek",
+        api_base="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        provider_type="openai",
         top_k=5,
         similarity_threshold=DEFAULT_AGENT_SIMILARITY_THRESHOLD,
         enable_context=False,

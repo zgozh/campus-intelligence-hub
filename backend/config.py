@@ -113,6 +113,9 @@ class Settings(BaseSettings):
     # DeepSeek API (optional - can be set per-agent in dashboard)
     deepseek_api_key: str = ""
 
+    # DashScope API (阿里云百炼 - 默认 LLM/Embedding/Rerank 供应商)
+    dashscope_api_key: str = ""
+
     # Jina Embedding API
     jina_embedding_api_base: str = "https://api.jina.ai/v1/embeddings"
 
@@ -144,7 +147,7 @@ class Settings(BaseSettings):
     secret_key_file: str = "/app/data/.secret_key"
     default_agent_id: str = ""
     agent_id_file: str = DEFAULT_AGENT_ID_FILE
-    create_default_agent_on_bootstrap: bool = False
+    create_default_agent_on_bootstrap: bool = True
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 1440
 
@@ -168,7 +171,7 @@ class Settings(BaseSettings):
     cors_allow_null_origin: bool = False
 
     # 应用
-    app_name: str = "Basjoo"
+    app_name: str = "校务智汇中台"
     app_port: int = 8000
 
     # 限流
