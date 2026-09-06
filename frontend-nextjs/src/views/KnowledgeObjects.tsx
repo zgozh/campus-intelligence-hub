@@ -42,22 +42,31 @@ export default function KnowledgeObjects() {
         onRow={(r) => ({ onClick: () => setSelected(r), style: { cursor: 'pointer' } })}
       />
 
-      <Drawer title={selected?.title} open={!!selected} onClose={() => setSelected(null)} width={480}>
+      <Drawer title={selected?.title} open={!!selected} onClose={() => setSelected(null)} width={720}>
         {selected && (
-          <Descriptions column={1} bordered size="small">
-            <Descriptions.Item label="类型">{selected.type}</Descriptions.Item>
-            <Descriptions.Item label="状态">{selected.status}</Descriptions.Item>
-            <Descriptions.Item label="版本">{selected.version}</Descriptions.Item>
-            <Descriptions.Item label="部门">{selected.department || '-'}</Descriptions.Item>
-            <Descriptions.Item label="有效期">{selected.effective_from} ~ {selected.effective_to}</Descriptions.Item>
-            <Descriptions.Item label="标签">{(selected.tags || []).join('、') || '-'}</Descriptions.Item>
-            <Descriptions.Item label="关键信息">
-              {(selected.facts || []).map((f, i) => (
-                <div key={i}>· {f.field}：{f.value}</div>
-              ))}
-            </Descriptions.Item>
-            <Descriptions.Item label="摘要">{selected.summary}</Descriptions.Item>
-          </Descriptions>
+          <>
+            <Descriptions column={1} bordered size="small">
+              <Descriptions.Item label="类型">{selected.type}</Descriptions.Item>
+              <Descriptions.Item label="状态">{selected.status}</Descriptions.Item>
+              <Descriptions.Item label="版本">{selected.version}</Descriptions.Item>
+              <Descriptions.Item label="部门">{selected.department || '-'}</Descriptions.Item>
+              <Descriptions.Item label="有效期">{selected.effective_from} ~ {selected.effective_to}</Descriptions.Item>
+              <Descriptions.Item label="标签">{(selected.tags || []).join('、') || '-'}</Descriptions.Item>
+              <Descriptions.Item label="关键信息">
+                {(selected.facts || []).map((f, i) => (
+                  <div key={i}>· {f.field}：{f.value}</div>
+                ))}
+              </Descriptions.Item>
+              <Descriptions.Item label="摘要">{selected.summary}</Descriptions.Item>
+            </Descriptions>
+            {selected.source_url && (
+              <div style={{ marginTop: 16 }}>
+                <a href={selected.source_url} target="_blank" rel="noreferrer">
+                  查看官网原文 ↗
+                </a>
+              </div>
+            )}
+          </>
         )}
       </Drawer>
     </div>

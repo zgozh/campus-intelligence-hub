@@ -869,6 +869,7 @@ class SourceCreate(BaseModel):
     source_type: Literal["manual", "website", "list_page", "file", "api"] = "website"
     base_url: Optional[str] = Field(None, max_length=1000)
     crawl_frequency: int = Field(24, ge=1, le=720)
+    max_pages: int = Field(1, ge=0, le=50)
 
 
 class SourceUpdate(BaseModel):
@@ -877,6 +878,7 @@ class SourceUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=200)
     base_url: Optional[str] = Field(None, max_length=1000)
     crawl_frequency: Optional[int] = Field(None, ge=1, le=720)
+    max_pages: Optional[int] = Field(None, ge=0, le=50)
     status: Optional[Literal["active", "paused", "error"]] = None
 
 
@@ -890,6 +892,7 @@ class SourceItem(BaseModel):
     source_type: str
     base_url: Optional[str] = None
     crawl_frequency: int = 24
+    max_pages: int = 1
     status: str
     last_crawled_at: Optional[datetime] = None
     last_success_at: Optional[datetime] = None

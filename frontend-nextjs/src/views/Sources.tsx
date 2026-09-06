@@ -129,6 +129,17 @@ export default function Sources() {
           <Form.Item name="base_url" label="URL（网站/列表页填）">
             <Input placeholder="https://www.gzhu.edu.cn/z__l/tzgg.htm" />
           </Form.Item>
+          <Form.Item name="max_pages" label="采集页数档位" initialValue={1}>
+            <Select
+              options={[
+                { value: 1, label: '1 页（仅最新一页）' },
+                { value: 3, label: '3 页' },
+                { value: 5, label: '5 页' },
+                { value: 10, label: '10 页' },
+                { value: 0, label: '全部（最多 50 页）' },
+              ]}
+            />
+          </Form.Item>
         </Form>
       </Modal>
     </div>

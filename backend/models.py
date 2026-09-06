@@ -631,6 +631,7 @@ class Source(Base):
     )
     base_url = Column(String(1000), nullable=True)
     crawl_frequency = Column(Integer, nullable=False, default=24)  # 采集间隔（小时）
+    max_pages = Column(Integer, nullable=False, default=1)  # 单次采集页数档位（0=全部封顶50）
     status = Column(
         SQLEnum("active", "paused", "error", name="source_status"),
         nullable=False,

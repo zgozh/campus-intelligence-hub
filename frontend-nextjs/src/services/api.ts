@@ -1039,6 +1039,7 @@ class APIService {
 		source_type?: string;
 		base_url?: string;
 		crawl_frequency?: number;
+		max_pages?: number;
 	}): Promise<CampusSource> {
 		return this.request(`/api/v1/sources`, {
 			method: "POST",
@@ -1130,6 +1131,7 @@ export interface CampusSource {
 	source_type: string;
 	base_url?: string | null;
 	crawl_frequency?: number;
+	max_pages?: number;
 	status: string;
 	last_crawled_at?: string | null;
 	last_success_at?: string | null;
@@ -1191,6 +1193,7 @@ export interface AskResponse {
 		department?: string | null;
 		status?: string;
 		effective_to?: string | null;
+		summary?: string | null;
 	}[];
 	query: string;
 }

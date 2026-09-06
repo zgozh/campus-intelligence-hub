@@ -35,6 +35,7 @@ async def ask(db, query: str, top_k: int = 5) -> dict:
                 "department": ko.department,
                 "status": ko.status,
                 "effective_to": ko.effective_to,
+                "summary": ko.summary,
             }
         )
 

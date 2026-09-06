@@ -57,7 +57,7 @@ async def run_collection(job_id: str) -> None:
             engine = CrawlEngine()
             try:
                 articles, failures, _ = await engine.fetch_source(
-                    source.base_url, adapter, max_pages=1
+                    source.base_url, adapter, max_pages=source.max_pages or 1
                 )
             finally:
                 await engine.close()
