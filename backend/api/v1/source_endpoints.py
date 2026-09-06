@@ -14,6 +14,8 @@ from api.endpoints.auth import get_current_admin
 from api.v1.schemas import (
     CollectionJobItem,
     CollectionJobListResponse,
+    ConflictItem,
+    ConflictListResponse,
     SourceCreate,
     SourceItem,
     SourceListResponse,
@@ -21,8 +23,10 @@ from api.v1.schemas import (
     SourceUpdate,
 )
 from database import get_db
-from models import AdminUser, CollectionJob, Source
+from models import AdminUser, CollectionJob, Conflict, Source
 from services.collection_service import run_collection
+from services.conflict_service import detect_conflicts
+from services.freshness_service import refresh_freshness
 
 logger = logging.getLogger(__name__)
 
@@ -172,3 +176,44 @@ async def get_job(
     if not job:
         raise HTTPException(status_code=404, detail="采集任务不存在")
     return job
+
+
+# ========== Freshness / Conflict (EPIC 7) ==========
+
+
+@router.post("/refresh")
+async def refresh_knowledge(
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """触发时效刷新 + 冲突检测。"""
+    freshness = await refresh_freshness(db)
+    conflicts = await detect_conflicts(db)
+    return {"expired": freshness["expired"], "conflicts": conflicts}
+
+
+@router.get("/conflicts", response_model=ConflictListResponse)
+async def list_conflicts(
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Conflict).order_by(Conflict.created_at.desc()))
+    conflicts = result.scalars().all()
+    total = len(conflicts)
+    return ConflictListResponse(conflicts=list(conflicts), total=total)
+
+
+@router.post("/conflicts/{conflict_id}/resolve")
+async def resolve_conflict(
+    conflict_id: str,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    cf = await db.get(Conflict, conflict_id)
+    if not cf:
+        raise HTTPException(status_code=404, detail="冲突不存在")
+    cf.status = "resolved"
+    cf.resolved_by = str(current_user.id)
+    cf.resolved_at = datetime.now(timezone.utc)
+    await db.commit()
+    return {"resolved": True}

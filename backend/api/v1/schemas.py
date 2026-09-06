@@ -933,3 +933,31 @@ class CollectionJobListResponse(BaseModel):
 
     jobs: List[CollectionJobItem]
     total: int
+
+
+# ========== Conflict Schemas (EPIC 7) ==========
+
+
+class ConflictItem(BaseModel):
+    """冲突项"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    object_a: str
+    object_b: str
+    field: str
+    value_a: Optional[str] = None
+    value_b: Optional[str] = None
+    confidence: Optional[float] = None
+    status: str
+    resolved_by: Optional[str] = None
+    created_at: datetime
+    resolved_at: Optional[datetime] = None
+
+
+class ConflictListResponse(BaseModel):
+    """冲突列表响应"""
+
+    conflicts: List[ConflictItem]
+    total: int

@@ -11,7 +11,7 @@ from collectors.gzhu import GUZhuAdapter
 from collectors.gznews import GUNewsAdapter
 from database import AsyncSessionLocal
 from knowledge.fingerprint import canonical_title
-from models import CollectionJob, RawDocument, Source, normalize_url
+from models import CollectionJob, KnowledgeObject, RawDocument, Source, normalize_url
 from parser.extract import extract_article
 from services.knowledge_service import build_knowledge_object
 
@@ -104,6 +104,14 @@ async def run_collection(job_id: str) -> None:
                     )
                     db.add(doc)
                     updated += 1
+                    # 版本切换：旧版本 KO 标记 EXPIRED
+                    old_kos = await db.execute(
+                        select(KnowledgeObject).where(
+                            KnowledgeObject.raw_document_id == existing.id
+                        )
+                    )
+                    for old_ko in old_kos.scalars():
+                        old_ko.status = "EXPIRED"
                     await build_knowledge_object(db, doc)
                 else:
                     doc = RawDocument(

@@ -734,3 +734,23 @@ class KnowledgeObject(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     raw_document = relationship("RawDocument", backref="knowledge_objects")
+
+
+class Conflict(Base):
+    """知识冲突（spec §14 / §24 Conflict）。"""
+
+    __tablename__ = "conflicts"
+
+    id = Column(
+        String(50), primary_key=True, default=lambda: f"cf_{uuid.uuid4().hex[:12]}"
+    )
+    object_a = Column(String(50), nullable=False)  # KnowledgeObject id
+    object_b = Column(String(50), nullable=False)  # KnowledgeObject id
+    field = Column(String(50), nullable=False)  # 冲突字段（如 截止日期）
+    value_a = Column(String(200), nullable=True)
+    value_b = Column(String(200), nullable=True)
+    confidence = Column(Float, nullable=True, default=0.8)
+    status = Column(String(20), nullable=False, default="open", index=True)  # open/resolved
+    resolved_by = Column(String(50), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
