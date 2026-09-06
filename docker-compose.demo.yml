@@ -1,0 +1,27 @@
+# ============================================
+# Campus Intelligence Hub — Demo 覆盖（Mock 模式）
+# 配合主 compose 使用：
+#   docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d --build
+# 无模型 API key 时自动 Mock，断网/限流/key 过期也能演示 70%
+# ============================================
+
+services:
+  backend:
+    environment:
+      - LLM_PROVIDER=mock
+
+  seed:
+    image: campus-intelligence-hub-backend:latest
+    container_name: campus-seed
+    command: ["python3", "-m", "scripts.seed_demo"]
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/campus_hub
+      - SECRET_KEY=demo-secret-key
+      - SECRET_KEY_FILE=/app/data/.secret_key
+      - ENCRYPTION_KEY_FILE=/app/data/.encryption_key
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - campus-network
+    restart: "no"
