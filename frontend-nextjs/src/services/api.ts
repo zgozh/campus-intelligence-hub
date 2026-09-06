@@ -1028,6 +1028,85 @@ class APIService {
 	async getAdminSessionMessages(sessionId: string): Promise<any[]> {
 		return this.request(`/api/v1/admin/sessions/${sessionId}/messages`);
 	}
+
+	// Campus Source & CollectionJob APIs (EPIC 3)
+	async listSources(): Promise<{ sources: CampusSource[]; total: number }> {
+		return this.request(`/api/v1/sources`);
+	}
+
+	async createSource(data: {
+		name: string;
+		source_type?: string;
+		base_url?: string;
+		crawl_frequency?: number;
+	}): Promise<CampusSource> {
+		return this.request(`/api/v1/sources`, {
+			method: "POST",
+			body: JSON.stringify(data),
+		});
+	}
+
+	async updateSource(
+		id: string,
+		data: {
+			name?: string;
+			base_url?: string;
+			crawl_frequency?: number;
+			status?: string;
+		},
+	): Promise<CampusSource> {
+		return this.request(`/api/v1/sources/${id}`, {
+			method: "PUT",
+			body: JSON.stringify(data),
+		});
+	}
+
+	async deleteSource(id: string): Promise<{ deleted: boolean }> {
+		return this.request(`/api/v1/sources/${id}`, { method: "DELETE" });
+	}
+
+	async runSource(id: string): Promise<{ job_id: string; status: string }> {
+		return this.request(`/api/v1/sources/${id}/run`, { method: "POST" });
+	}
+
+	async pauseSource(id: string): Promise<CampusSource> {
+		return this.request(`/api/v1/sources/${id}/pause`, { method: "POST" });
+	}
+
+	async listJobs(sourceId?: string): Promise<{ jobs: CollectionJob[]; total: number }> {
+		const q = sourceId ? `?source_id=${sourceId}` : "";
+		return this.request(`/api/v1/jobs${q}`);
+	}
+
+	async getJob(id: string): Promise<CollectionJob> {
+		return this.request(`/api/v1/jobs/${id}`);
+	}
+}
+
+export interface CampusSource {
+	id: string;
+	name: string;
+	source_type: string;
+	base_url?: string | null;
+	crawl_frequency?: number;
+	status: string;
+	last_crawled_at?: string | null;
+	last_success_at?: string | null;
+	last_error?: string | null;
+	created_at: string;
+	updated_at?: string | null;
+}
+
+export interface CollectionJob {
+	id: string;
+	source_id: string;
+	status: string;
+	stage_trace?: Record<string, string> | null;
+	result?: { fetched?: number; indexed?: number; errors?: string[] } | null;
+	error_message?: string | null;
+	created_at: string;
+	started_at?: string | null;
+	completed_at?: string | null;
 }
 
 export const api = new APIService();

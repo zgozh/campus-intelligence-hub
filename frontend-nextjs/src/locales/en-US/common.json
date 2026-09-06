@@ -72,7 +72,9 @@
     "agentSettings": "Agent Settings",
     "administrator": "Administrator",
     "agents": "Agents",
-    "users": "Users"
+    "users": "Users",
+    "sources": "Sources",
+    "jobs": "Collection Jobs"
   },
   "errors": {
     "required": "This field is required",
