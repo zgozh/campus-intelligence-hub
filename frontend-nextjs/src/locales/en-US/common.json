@@ -76,7 +76,10 @@
     "sources": "Sources",
     "jobs": "Collection Jobs",
     "radar": "Knowledge Radar",
-    "digests": "Digests"
+    "digests": "Digests",
+    "knowledgeObjects": "Knowledge Objects",
+    "review": "Review Queue",
+    "ask": "Ask AI"
   },
   "errors": {
     "required": "This field is required",

@@ -1095,6 +1095,33 @@ class APIService {
 	async listDigests(): Promise<{ digests: DigestItem[]; total: number }> {
 		return this.request(`/api/v1/digests`);
 	}
+
+	// Review Queue APIs
+	async listReviewTasks(status?: string): Promise<{ tasks: ReviewTaskItem[]; total: number }> {
+		const q = status ? `?status=${status}` : "";
+		return this.request(`/api/v1/review-tasks${q}`);
+	}
+
+	async approveReviewTask(id: string): Promise<{ task_id: string; status: string }> {
+		return this.request(`/api/v1/review-tasks/${id}/approve`, { method: "POST" });
+	}
+
+	async rejectReviewTask(id: string): Promise<{ task_id: string; status: string }> {
+		return this.request(`/api/v1/review-tasks/${id}/reject`, { method: "POST" });
+	}
+
+	// Ask AI APIs
+	async askQuestion(query: string, topK = 5): Promise<AskResponse> {
+		return this.request(`/api/v1/ask`, {
+			method: "POST",
+			body: JSON.stringify({ query, top_k: topK }),
+		});
+	}
+
+	// Knowledge Object APIs
+	async listKnowledgeObjects(): Promise<{ objects: KnowledgeObject[]; total: number }> {
+		return this.request(`/api/v1/knowledge-objects`);
+	}
 }
 
 export interface CampusSource {
@@ -1141,6 +1168,48 @@ export interface DigestItem {
 	title: string;
 	content: string;
 	created_at: string;
+}
+
+export interface ReviewTaskItem {
+	id: string;
+	knowledge_object_id: string;
+	reason: string;
+	status: string;
+	note?: string | null;
+	created_at: string;
+	reviewed_at?: string | null;
+	ko_title?: string | null;
+	ko_type?: string | null;
+}
+
+export interface AskResponse {
+	answer: string;
+	citations: {
+		title: string;
+		url?: string | null;
+		type?: string;
+		department?: string | null;
+		status?: string;
+		effective_to?: string | null;
+	}[];
+	query: string;
+}
+
+export interface KnowledgeObject {
+	id: string;
+	type: string;
+	title: string;
+	department?: string | null;
+	status: string;
+	version: number;
+	confidence?: number | null;
+	effective_from?: string | null;
+	effective_to?: string | null;
+	facts?: { field: string; value: string }[] | null;
+	tags?: string[] | null;
+	summary?: string | null;
+	source_url?: string | null;
+	created_at?: string | null;
 }
 
 export const api = new APIService();
