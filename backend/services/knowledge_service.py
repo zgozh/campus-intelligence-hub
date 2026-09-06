@@ -1,8 +1,12 @@
 """RawDocument → KnowledgeObject 编排（EPIC 6，规则主链路）。"""
+import logging
+
 from agents.classifier import classify_category, rule_tag_topics
 from agents.curator import summarize
 from agents.extractor import extract_department, infer_expiry
 from models import KnowledgeObject, RawDocument
+
+logger = logging.getLogger(__name__)
 
 _TYPE_MAP = {
     "通知公告": "Announcement",
@@ -49,4 +53,18 @@ async def build_knowledge_object(db, raw_doc: RawDocument) -> KnowledgeObject:
         source_url=raw_doc.url,
     )
     db.add(ko)
+    await db.flush()  # 确保 ko.id 已生成
+
+    # 语义向量入库（可选，失败降级仅关键词检索）
+    try:
+        from agents.embedding import embed_texts
+        from services.vector_service import ensure_collection, upsert_ko
+
+        await ensure_collection()
+        embs = await embed_texts([title + " " + (ko.summary or "")[:500]])
+        if embs:
+            await upsert_ko(ko.id, embs[0], {"title": title, "type": ko.type})
+    except Exception:
+        logger.warning("向量入库失败（降级仅关键词检索）")
+
     return ko

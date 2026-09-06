@@ -94,6 +94,18 @@ async def seed_all() -> int:
                 source_url=url,
             )
             db.add(ko)
+            await db.flush()
+            # 语义向量入库（DashScope embedding → Qdrant）
+            try:
+                from agents.embedding import embed_texts
+                from services.vector_service import ensure_collection, upsert_ko
+
+                await ensure_collection()
+                embs = await embed_texts([t.title + " " + t.content[:500]])
+                if embs:
+                    await upsert_ko(ko.id, embs[0], {"title": t.title, "type": ko.type})
+            except Exception as e:
+                print(f"  向量入库失败 {t.title}: {e}")
 
         await db.commit()
         return len(DEMO_ARTICLES)
