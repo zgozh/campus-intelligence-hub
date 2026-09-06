@@ -16,6 +16,8 @@ from api.v1.schemas import (
     CollectionJobListResponse,
     ConflictItem,
     ConflictListResponse,
+    ReviewTaskItem,
+    ReviewTaskListResponse,
     SourceCreate,
     SourceItem,
     SourceListResponse,
@@ -23,10 +25,11 @@ from api.v1.schemas import (
     SourceUpdate,
 )
 from database import get_db
-from models import AdminUser, CollectionJob, Conflict, Source
+from models import AdminUser, CollectionJob, Conflict, KnowledgeObject, ReviewTask, Source
 from services.collection_service import run_collection
 from services.conflict_service import detect_conflicts
 from services.freshness_service import refresh_freshness
+from services.review_service import approve_task, build_review_queue, reject_task
 
 logger = logging.getLogger(__name__)
 
@@ -186,10 +189,11 @@ async def refresh_knowledge(
     current_user: AdminUser = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """触发时效刷新 + 冲突检测。"""
+    """触发时效刷新 + 冲突检测 + 审核队列构建。"""
     freshness = await refresh_freshness(db)
     conflicts = await detect_conflicts(db)
-    return {"expired": freshness["expired"], "conflicts": conflicts}
+    review = await build_review_queue(db)
+    return {"expired": freshness["expired"], "conflicts": conflicts, "review": review}
 
 
 @router.get("/conflicts", response_model=ConflictListResponse)
@@ -217,3 +221,56 @@ async def resolve_conflict(
     cf.resolved_at = datetime.now(timezone.utc)
     await db.commit()
     return {"resolved": True}
+
+
+# ========== Review Queue (EPIC 9) ==========
+
+
+@router.get("/review-tasks", response_model=ReviewTaskListResponse)
+async def list_review_tasks(
+    status: str | None = None,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    query = (
+        select(ReviewTask, KnowledgeObject)
+        .join(KnowledgeObject, ReviewTask.knowledge_object_id == KnowledgeObject.id)
+        .order_by(ReviewTask.created_at.desc())
+    )
+    if status:
+        query = query.where(ReviewTask.status == status)
+    result = await db.execute(query)
+    tasks = []
+    for rt, ko in result:
+        tasks.append(
+            ReviewTaskItem(
+                id=rt.id,
+                knowledge_object_id=rt.knowledge_object_id,
+                reason=rt.reason,
+                status=rt.status,
+                note=rt.note,
+                created_at=rt.created_at,
+                reviewed_at=rt.reviewed_at,
+                ko_title=ko.title,
+                ko_type=ko.type,
+            )
+        )
+    return ReviewTaskListResponse(tasks=tasks, total=len(tasks))
+
+
+@router.post("/review-tasks/{task_id}/approve")
+async def approve_review_task(
+    task_id: str,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    return await approve_task(db, task_id, current_user.id)
+
+
+@router.post("/review-tasks/{task_id}/reject")
+async def reject_review_task(
+    task_id: str,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    return await reject_task(db, task_id, current_user.id)

@@ -961,3 +961,29 @@ class ConflictListResponse(BaseModel):
 
     conflicts: List[ConflictItem]
     total: int
+
+
+# ========== Review Task Schemas (EPIC 9) ==========
+
+
+class ReviewTaskItem(BaseModel):
+    """审核任务项"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    knowledge_object_id: str
+    reason: str
+    status: str
+    note: Optional[str] = None
+    created_at: datetime
+    reviewed_at: Optional[datetime] = None
+    ko_title: Optional[str] = None
+    ko_type: Optional[str] = None
+
+
+class ReviewTaskListResponse(BaseModel):
+    """审核任务列表响应"""
+
+    tasks: List[ReviewTaskItem]
+    total: int

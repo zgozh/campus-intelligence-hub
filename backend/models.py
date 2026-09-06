@@ -754,3 +754,22 @@ class Conflict(Base):
     resolved_by = Column(String(50), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     resolved_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class ReviewTask(Base):
+    """审核任务（spec §20 / §24 ReviewTask）。"""
+
+    __tablename__ = "review_tasks"
+
+    id = Column(
+        String(50), primary_key=True, default=lambda: f"rt_{uuid.uuid4().hex[:12]}"
+    )
+    knowledge_object_id = Column(
+        String(50), ForeignKey("knowledge_objects.id"), nullable=False, index=True
+    )
+    reason = Column(String(50), nullable=False)  # low_confidence / conflict
+    status = Column(String(20), nullable=False, default="pending", index=True)  # pending/approved/rejected
+    note = Column(Text, nullable=True)
+    reviewed_by = Column(String(50), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
