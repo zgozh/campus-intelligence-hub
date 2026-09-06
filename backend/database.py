@@ -19,26 +19,32 @@ from core.encryption import encrypt_api_key
 def _to_async_database_url(database_url: str) -> str:
     if database_url.startswith("sqlite:///"):
         return database_url.replace("sqlite:///", "sqlite+aiosqlite:///")
+    if database_url.startswith("postgresql://"):
+        return database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
     return database_url
 
 
 def _create_engine(database_url: str):
     async_database_url = _to_async_database_url(database_url)
+    is_sqlite = database_url.startswith("sqlite")
+    connect_args = {"check_same_thread": False} if is_sqlite else {}
     engine = create_async_engine(
         async_database_url,
         echo=False,
         pool_pre_ping=True,
         poolclass=NullPool,
-        connect_args={"check_same_thread": False},
+        connect_args=connect_args,
     )
 
-    @event.listens_for(engine.sync_engine, "connect")
-    def set_sqlite_pragma(dbapi_conn, connection_record):
-        cursor = dbapi_conn.cursor()
-        cursor.execute("PRAGMA journal_mode=WAL")
-        cursor.execute("PRAGMA synchronous=NORMAL")
-        cursor.execute("PRAGMA busy_timeout=30000")  # 30 second timeout
-        cursor.close()
+    if is_sqlite:
+
+        @event.listens_for(engine.sync_engine, "connect")
+        def set_sqlite_pragma(dbapi_conn, connection_record):
+            cursor = dbapi_conn.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.execute("PRAGMA busy_timeout=30000")  # 30 second timeout
+            cursor.close()
 
     return engine
 
