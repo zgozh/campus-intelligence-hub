@@ -1,55 +1,32 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import type { CSSProperties } from 'react';
+import { Button, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, Typography, message } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
 import { api } from '../services/api';
 import type { CampusSource } from '../services/api';
 
-const inputStyle: CSSProperties = {
-  padding: '8px 12px',
-  borderRadius: '8px',
-  border: '1px solid rgba(128,128,128,0.3)',
-  background: 'rgba(255,255,255,0.05)',
-  color: 'var(--color-text, #e8e8e8)',
-  fontSize: '14px',
-};
-const btnStyle: CSSProperties = {
-  padding: '8px 14px',
-  borderRadius: '8px',
-  border: 'none',
-  background: 'var(--color-primary, #06B6D4)',
-  color: '#fff',
-  cursor: 'pointer',
-  fontSize: '13px',
-};
-const dangerBtn: CSSProperties = { ...btnStyle, background: 'rgba(220,60,60,0.85)' };
-const thStyle: CSSProperties = {
-  textAlign: 'left',
-  padding: '10px 12px',
-  borderBottom: '1px solid rgba(128,128,128,0.25)',
-  fontSize: '13px',
-  color: 'var(--color-text-secondary, #aaa)',
-};
-const tdStyle: CSSProperties = {
-  padding: '10px 12px',
-  borderBottom: '1px solid rgba(128,128,128,0.15)',
-  fontSize: '14px',
+const { Title } = Typography;
+
+const statusColor: Record<string, string> = {
+  active: 'green',
+  paused: 'orange',
+  error: 'red',
 };
 
 export default function Sources() {
   const [sources, setSources] = useState<CampusSource[]>([]);
   const [loading, setLoading] = useState(false);
-  const [name, setName] = useState('');
-  const [sourceType, setSourceType] = useState('website');
-  const [baseUrl, setBaseUrl] = useState('');
+  const [open, setOpen] = useState(false);
+  const [form] = Form.useForm();
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.listSources();
-      setSources(data.sources || []);
+      const d = await api.listSources();
+      setSources(d.sources || []);
     } catch (e) {
-      alert('加载数据源失败：' + (e instanceof Error ? e.message : '未知错误'));
+      message.error('加载数据源失败');
     } finally {
       setLoading(false);
     }
@@ -59,123 +36,101 @@ export default function Sources() {
     load();
   }, [load]);
 
-  const create = async () => {
-    if (!name.trim()) {
-      alert('请输入名称');
-      return;
-    }
+  const onCreate = async () => {
+    const values = await form.validateFields();
     try {
-      await api.createSource({
-        name: name.trim(),
-        source_type: sourceType,
-        base_url: baseUrl.trim() || undefined,
-      });
-      setName('');
-      setBaseUrl('');
+      await api.createSource(values);
+      message.success('创建成功');
+      setOpen(false);
+      form.resetFields();
       await load();
     } catch (e) {
-      alert('创建失败：' + (e instanceof Error ? e.message : '未知错误'));
+      message.error('创建失败');
     }
   };
 
-  const run = async (id: string) => {
-    try {
-      const r = await api.runSource(id);
-      alert(`已触发采集任务 ${r.job_id}`);
-    } catch (e) {
-      alert('触发失败：' + (e instanceof Error ? e.message : '未知错误'));
-    }
+  const onRun = async (id: string) => {
+    await api.runSource(id);
+    message.success('已触发采集任务');
+  };
+  const onPause = async (id: string) => {
+    await api.pauseSource(id);
+    await load();
+  };
+  const onDelete = async (id: string) => {
+    await api.deleteSource(id);
+    message.success('已删除');
+    await load();
   };
 
-  const pause = async (id: string) => {
-    try {
-      await api.pauseSource(id);
-      await load();
-    } catch (e) {
-      alert('操作失败');
-    }
-  };
-
-  const del = async (id: string) => {
-    if (!confirm('确认删除该数据源？')) return;
-    try {
-      await api.deleteSource(id);
-      await load();
-    } catch (e) {
-      alert('删除失败');
-    }
-  };
+  const columns = [
+    { title: '名称', dataIndex: 'name' },
+    { title: '类型', dataIndex: 'source_type', width: 120 },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      width: 100,
+      render: (s: string) => <Tag color={statusColor[s] || 'default'}>{s}</Tag>,
+    },
+    {
+      title: '上次采集',
+      dataIndex: 'last_crawled_at',
+      width: 180,
+      render: (v: string | null) => (v ? new Date(v).toLocaleString() : '-'),
+    },
+    {
+      title: '操作',
+      width: 240,
+      render: (_: unknown, record: CampusSource) => (
+        <Space>
+          <Button size="small" type="primary" onClick={() => onRun(record.id)}>
+            立即采集
+          </Button>
+          <Button size="small" onClick={() => onPause(record.id)}>
+            暂停
+          </Button>
+          <Popconfirm title="确认删除该数据源？" onConfirm={() => onDelete(record.id)}>
+            <Button size="small" danger>
+              删除
+            </Button>
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
 
   return (
-    <div style={{ padding: 'var(--space-6, 24px)' }}>
-      <h1 style={{ fontSize: 'var(--text-2xl, 24px)', fontWeight: 700, marginBottom: 'var(--space-4, 16px)' }}>
-        数据源管理
-      </h1>
-
-      <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="名称（如 学校官网）"
-          style={inputStyle}
-        />
-        <select value={sourceType} onChange={(e) => setSourceType(e.target.value)} style={inputStyle}>
-          <option value="website">官网/网站</option>
-          <option value="list_page">通知公告列表页</option>
-          <option value="file">上传文件</option>
-          <option value="manual">手动录入</option>
-          <option value="api">API</option>
-        </select>
-        <input
-          value={baseUrl}
-          onChange={(e) => setBaseUrl(e.target.value)}
-          placeholder="URL（网站/列表页填）"
-          style={{ ...inputStyle, flex: 1, minWidth: 220 }}
-        />
-        <button onClick={create} style={btnStyle}>
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <Title level={4} style={{ margin: 0 }}>数据源管理</Title>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>
           新增数据源
-        </button>
+        </Button>
       </div>
 
-      {loading ? (
-        <p style={{ color: 'var(--color-text-secondary, #aaa)' }}>加载中...</p>
-      ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              {['名称', '类型', '状态', '上次采集', '操作'].map((h) => (
-                <th key={h} style={thStyle}>
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {sources.map((s) => (
-              <tr key={s.id}>
-                <td style={tdStyle}>{s.name}</td>
-                <td style={tdStyle}>{s.source_type}</td>
-                <td style={tdStyle}>{s.status}</td>
-                <td style={tdStyle}>{s.last_crawled_at ? new Date(s.last_crawled_at).toLocaleString() : '-'}</td>
-                <td style={tdStyle}>
-                  <button onClick={() => run(s.id)} style={btnStyle}>
-                    立即采集
-                  </button>{' '}
-                  <button onClick={() => pause(s.id)} style={btnStyle}>
-                    暂停
-                  </button>{' '}
-                  <button onClick={() => del(s.id)} style={dangerBtn}>
-                    删除
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      <p style={{ marginTop: 12, color: 'var(--color-text-secondary, #aaa)', fontSize: 13 }}>
-        共 {sources.length} 个数据源
-      </p>
+      <Table rowKey="id" columns={columns} dataSource={sources} loading={loading} pagination={false} />
+
+      <Modal title="新增数据源" open={open} onOk={onCreate} onCancel={() => setOpen(false)} destroyOnClose>
+        <Form form={form} layout="vertical" initialValues={{ source_type: 'website' }}>
+          <Form.Item name="name" label="名称" rules={[{ required: true, message: '请输入名称' }]}>
+            <Input placeholder="如 广州大学通知公告" />
+          </Form.Item>
+          <Form.Item name="source_type" label="类型">
+            <Select
+              options={[
+                { value: 'website', label: '官网/网站' },
+                { value: 'list_page', label: '通知公告列表页' },
+                { value: 'file', label: '上传文件' },
+                { value: 'manual', label: '手动录入' },
+                { value: 'api', label: 'API' },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item name="base_url" label="URL（网站/列表页填）">
+            <Input placeholder="https://www.gzhu.edu.cn/z__l/tzgg.htm" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 }
