@@ -689,8 +689,10 @@ class RawDocument(Base):
     url = Column(String(1000), nullable=False, index=True)
     normalized_url = Column(String(1000), nullable=False, index=True)
     title = Column(String(500), nullable=False)
+    canonical_title = Column(String(500), nullable=True, index=True)  # 规范化标题（版本匹配）
     content = Column(Text, nullable=True)  # 清洗后正文
     content_hash = Column(String(64), nullable=True, index=True)  # 去重
+    version = Column(Integer, nullable=False, default=1)  # 版本号（标题同、正文异时 +1）
     publish_time = Column(String(20), nullable=True)
     fetched_at = Column(DateTime(timezone=True), server_default=func.now())
     source_site = Column(String(50), nullable=True)

@@ -10,6 +10,7 @@ from collectors.engine import CrawlEngine
 from collectors.gzhu import GUZhuAdapter
 from collectors.gznews import GUNewsAdapter
 from database import AsyncSessionLocal
+from knowledge.fingerprint import canonical_title
 from models import CollectionJob, RawDocument, Source, normalize_url
 from parser.extract import extract_article
 
@@ -65,31 +66,60 @@ async def run_collection(job_id: str) -> None:
 
             saved = 0
             skipped = 0
+            updated = 0
             for raw in articles:
                 parsed = extract_article(raw)
                 chash = content_hash(parsed.content or "")
                 if not chash:
                     continue
-                exists = await db.scalar(
-                    select(RawDocument.id).where(RawDocument.content_hash == chash)
+                norm_url = normalize_url(raw.url)
+                ctitle = canonical_title(parsed.title)
+
+                # 按 normalized_url 查找已有文档（同一网页）
+                existing = await db.scalar(
+                    select(RawDocument)
+                    .where(RawDocument.normalized_url == norm_url)
+                    .order_by(RawDocument.version.desc())
                 )
-                if exists:
-                    skipped += 1
-                    continue
-                doc = RawDocument(
-                    source_id=source.id,
-                    url=raw.url,
-                    normalized_url=normalize_url(raw.url),
-                    title=parsed.title,
-                    content=parsed.content,
-                    content_hash=chash,
-                    publish_time=parsed.publish_date,
-                    source_site=parsed.source_site,
-                    column=parsed.column,
-                    department=parsed.department,
-                )
-                db.add(doc)
-                saved += 1
+
+                if existing:
+                    if existing.content_hash == chash:
+                        skipped += 1  # 内容没变，不重复入库
+                        continue
+                    # 标题相同 + 正文 hash 不同 → 新版本
+                    doc = RawDocument(
+                        source_id=source.id,
+                        url=raw.url,
+                        normalized_url=norm_url,
+                        title=parsed.title,
+                        canonical_title=ctitle,
+                        content=parsed.content,
+                        content_hash=chash,
+                        version=existing.version + 1,
+                        publish_time=parsed.publish_date,
+                        source_site=parsed.source_site,
+                        column=parsed.column,
+                        department=parsed.department,
+                    )
+                    db.add(doc)
+                    updated += 1
+                else:
+                    doc = RawDocument(
+                        source_id=source.id,
+                        url=raw.url,
+                        normalized_url=norm_url,
+                        title=parsed.title,
+                        canonical_title=ctitle,
+                        content=parsed.content,
+                        content_hash=chash,
+                        version=1,
+                        publish_time=parsed.publish_date,
+                        source_site=parsed.source_site,
+                        column=parsed.column,
+                        department=parsed.department,
+                    )
+                    db.add(doc)
+                    saved += 1
 
             job.stage_trace = {
                 "Fetch": "ok",
@@ -103,6 +133,7 @@ async def run_collection(job_id: str) -> None:
             job.result = {
                 "fetched": len(articles),
                 "indexed": saved,
+                "updated": updated,
                 "skipped": skipped,
                 "errors": failures,
             }
