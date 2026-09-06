@@ -13,6 +13,7 @@ from database import AsyncSessionLocal
 from knowledge.fingerprint import canonical_title
 from models import CollectionJob, RawDocument, Source, normalize_url
 from parser.extract import extract_article
+from services.knowledge_service import build_knowledge_object
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +104,7 @@ async def run_collection(job_id: str) -> None:
                     )
                     db.add(doc)
                     updated += 1
+                    await build_knowledge_object(db, doc)
                 else:
                     doc = RawDocument(
                         source_id=source.id,
@@ -120,6 +122,7 @@ async def run_collection(job_id: str) -> None:
                     )
                     db.add(doc)
                     saved += 1
+                    await build_knowledge_object(db, doc)
 
             job.stage_trace = {
                 "Fetch": "ok",

@@ -701,3 +701,36 @@ class RawDocument(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     source = relationship("Source", backref="documents")
+
+
+class KnowledgeObject(Base):
+    """知识对象（spec §8.1，原创核心）。"""
+
+    __tablename__ = "knowledge_objects"
+
+    id = Column(
+        String(50), primary_key=True, default=lambda: f"ko_{uuid.uuid4().hex[:12]}"
+    )
+    raw_document_id = Column(
+        String(50), ForeignKey("raw_documents.id"), nullable=True, index=True
+    )
+    type = Column(String(30), nullable=False, default="Announcement", index=True)
+    title = Column(String(500), nullable=False)
+    department = Column(String(100), nullable=True)
+    effective_from = Column(String(20), nullable=True)
+    effective_to = Column(String(20), nullable=True)
+    entities = Column(JSON, nullable=True)  # [{"name":..., "type":...}]
+    facts = Column(JSON, nullable=True)  # [{"field":..., "value":...}]
+    summary = Column(Text, nullable=True)
+    tags = Column(JSON, nullable=True)  # [tag1, ...]
+    relations = Column(JSON, nullable=True)  # [{"target":..., "relation":...}]
+    confidence = Column(Float, nullable=True, default=0.8)
+    status = Column(
+        String(20), nullable=False, default="PUBLISHED", index=True
+    )  # DISCOVERED/PROCESSING/REVIEW_REQUIRED/PUBLISHED/UPDATED/EXPIRED/ARCHIVED
+    version = Column(Integer, nullable=False, default=1)
+    source_url = Column(String(1000), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    raw_document = relationship("RawDocument", backref="knowledge_objects")
