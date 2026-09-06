@@ -1,0 +1,445 @@
+import json
+
+import pytest
+
+from api.v1.endpoints import replace_source_placeholders
+
+
+def test_replace_source_placeholders_uses_only_url_sources():
+    reply = "See [website](#source-1), [faq](#source-2), and [missing](#source-5)."
+    sources = [
+        {"type": "url", "url": "https://example.com/page"},
+        {"type": "file", "filename": "FAQ"},
+    ]
+
+    result = replace_source_placeholders(reply, sources)
+
+    assert result == "See [website](https://example.com/page), faq, and missing."
+
+
+@pytest.mark.asyncio
+async def test_get_quota(client):
+    response = await client.get("/api/v1/agent:default")
+    agent_id = response.json()["id"]
+
+    response = await client.get(f"/api/v1/quota?agent_id={agent_id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert "max_urls" in data
+    assert "max_files" in data
+    assert "used_urls" in data
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_sends_sse_events(public_client, default_agent_id):
+    response = await public_client.post(
+        "/api/v1/chat/stream",
+        json={
+            "agent_id": default_agent_id,
+            "message": "Hello stream",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+
+    events = []
+    raw_body = response.text.strip()
+    for raw_event in raw_body.split("\n\n"):
+        if not raw_event.strip():
+            continue
+
+        event_name = None
+        payload_lines = []
+        for line in raw_event.splitlines():
+            if line.startswith("event:"):
+                event_name = line.split(":", 1)[1].strip()
+            elif line.startswith("data:"):
+                payload_lines.append(line.split(":", 1)[1].strip())
+
+        events.append((event_name, json.loads("\n".join(payload_lines))))
+
+    assert events[0][0] == "sources"
+    assert isinstance(events[0][1]["sources"], list)
+    assert any(event_name == "content" for event_name, _ in events)
+
+    done_events = [payload for event_name, payload in events if event_name == "done"]
+    assert len(done_events) == 1
+    done_payload = done_events[0]
+    assert done_payload["session_id"]
+    assert done_payload["taken_over"] is False
+
+
+@pytest.mark.asyncio
+async def test_chat_messages_include_sources(public_client, default_agent_id):
+    chat_response = await public_client.post(
+        "/api/v1/chat",
+        json={
+            "agent_id": default_agent_id,
+            "message": "History sources",
+        },
+    )
+    assert chat_response.status_code == 200
+    session_id = chat_response.json()["session_id"]
+
+    messages_response = await public_client.get(
+        f"/api/v1/chat/messages?session_id={session_id}"
+    )
+    assert messages_response.status_code == 200
+
+    messages = messages_response.json()
+    assistant_messages = [
+        message for message in messages if message["role"] == "assistant"
+    ]
+    assert assistant_messages
+    assert "sources" in assistant_messages[-1]
+    assert isinstance(assistant_messages[-1]["sources"], list)
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_hides_internal_errors(
+    public_client, default_agent_id, monkeypatch
+):
+    from api.v1 import endpoints
+
+    async def broken_chat_completion(*args, **kwargs):
+        raise RuntimeError("provider secret exploded")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(
+        endpoints,
+        "get_llm_service",
+        lambda **kwargs: type(
+            "BrokenLLM", (), {"chat_completion": broken_chat_completion}
+        )(),
+    )
+
+    response = await public_client.post(
+        "/api/v1/chat/stream",
+        json={
+            "agent_id": default_agent_id,
+            "message": "Trigger hidden error",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.text
+    assert "event: error" not in body
+    assert "provider secret exploded" not in body
+    assert "event: content" in body
+    assert "event: done" in body
+    assert "抱歉，当前服务受限" in body
+
+
+@pytest.mark.asyncio
+async def test_takeover_admin_reply_visible_via_public_polling(
+    client, default_agent_id
+):
+    chat_response = await client.post(
+        "/api/v1/chat",
+        json={
+            "agent_id": default_agent_id,
+            "message": "Takeover test",
+        },
+    )
+    assert chat_response.status_code == 200
+    business_session_id = chat_response.json()["session_id"]
+
+    sessions_response = await client.get("/api/v1/admin/sessions?skip=0&limit=20")
+    assert sessions_response.status_code == 200
+    sessions = sessions_response.json()["items"]
+    matched_session = next(
+        item for item in sessions if item["session_id"] == business_session_id
+    )
+    db_session_id = matched_session["id"]
+
+    takeover_response = await client.post(
+        f"/api/v1/admin/sessions/{db_session_id}/takeover"
+    )
+    assert takeover_response.status_code == 200
+
+    send_response = await client.post(
+        "/api/v1/admin/sessions/send",
+        json={
+            "session_id": db_session_id,
+            "content": "Human agent reply",
+        },
+    )
+    assert send_response.status_code == 200
+
+    poll_response = await client.get(
+        f"/api/v1/chat/messages?session_id={business_session_id}&role=assistant"
+    )
+    assert poll_response.status_code == 200
+    polled_messages = poll_response.json()
+    assert any(message["content"] == "Human agent reply" for message in polled_messages)
+
+
+@pytest.mark.asyncio
+async def test_update_agent_accepts_legacy_rate_limit_field(client):
+    agent_response = await client.get("/api/v1/agent:default")
+    agent_id = agent_response.json()["id"]
+
+    update_response = await client.put(
+        f"/api/v1/agent?agent_id={agent_id}",
+        json={"rate_limit_per_hour": 3},
+    )
+
+    assert update_response.status_code == 200
+    assert update_response.json()["rate_limit_per_minute"] == 3
+
+
+@pytest.mark.asyncio
+async def test_taken_over_session_skips_rate_limit_reply(client, default_agent_id):
+    agent_response = await client.get("/api/v1/agent:default")
+    agent_id = agent_response.json()["id"]
+
+    await client.put(
+        f"/api/v1/agent?agent_id={agent_id}",
+        json={"rate_limit_per_minute": 1, "restricted_reply": "Limited"},
+    )
+
+    first_response = await client.post(
+        "/api/v1/chat",
+        json={
+            "agent_id": default_agent_id,
+            "message": "Takeover before rate limit",
+        },
+    )
+    assert first_response.status_code == 200
+    business_session_id = first_response.json()["session_id"]
+
+    sessions_response = await client.get("/api/v1/admin/sessions?skip=0&limit=20")
+    matched_session = next(
+        item
+        for item in sessions_response.json()["items"]
+        if item["session_id"] == business_session_id
+    )
+    db_session_id = matched_session["id"]
+
+    takeover_response = await client.post(
+        f"/api/v1/admin/sessions/{db_session_id}/takeover"
+    )
+    assert takeover_response.status_code == 200
+
+    second_response = await client.post(
+        "/api/v1/chat",
+        json={
+            "agent_id": default_agent_id,
+            "message": "Visitor after takeover",
+            "session_id": business_session_id,
+        },
+    )
+    assert second_response.status_code == 200
+    payload = second_response.json()
+    assert payload["taken_over"] is True
+    assert payload["reply"] == ""
+
+    messages_response = await client.get(
+        f"/api/v1/admin/sessions/{db_session_id}/messages"
+    )
+    assert messages_response.status_code == 200
+    messages = messages_response.json()
+    assert any(message["content"] == "Visitor after takeover" for message in messages)
+
+
+@pytest.mark.asyncio
+async def test_admin_sessions_web_payload_keeps_public_session_id(
+    client, default_agent_id
+):
+    chat_response = await client.post(
+        "/api/v1/chat",
+        json={
+            "agent_id": default_agent_id,
+            "message": "Session payload test",
+        },
+    )
+    assert chat_response.status_code == 200
+    business_session_id = chat_response.json()["session_id"]
+
+    sessions_response = await client.get("/api/v1/admin/sessions?skip=0&limit=20")
+    assert sessions_response.status_code == 200
+    sessions = sessions_response.json()["items"]
+    matched_session = next(
+        item for item in sessions if item["session_id"] == business_session_id
+    )
+    assert matched_session["id"]
+    assert matched_session["session_id"] == business_session_id
+
+
+@pytest.mark.asyncio
+async def test_public_chat_blocks_unlisted_widget_origin(
+    client, public_client, default_agent_id
+):
+    agent_response = await client.get("/api/v1/agent:default")
+    agent_id = agent_response.json()["id"]
+
+    update_response = await client.put(
+        f"/api/v1/agent?agent_id={agent_id}",
+        json={"allowed_widget_origins": ["https://allowed.example"]},
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["allowed_widget_origins"] == [
+        "https://allowed.example"
+    ]
+
+    blocked_response = await public_client.post(
+        "/api/v1/chat",
+        headers={"Origin": "https://blocked.example"},
+        json={
+            "agent_id": default_agent_id,
+            "message": "Blocked origin",
+        },
+    )
+    assert blocked_response.status_code == 403
+    assert blocked_response.json()["detail"] == "Widget origin not allowed"
+
+
+@pytest.mark.asyncio
+async def test_public_chat_allows_listed_widget_origin(
+    client, public_client, default_agent_id
+):
+    agent_response = await client.get("/api/v1/agent:default")
+    agent_id = agent_response.json()["id"]
+
+    await client.put(
+        f"/api/v1/agent?agent_id={agent_id}",
+        json={"allowed_widget_origins": ["https://allowed.example"]},
+    )
+
+    allowed_response = await public_client.post(
+        "/api/v1/chat",
+        headers={"Origin": "https://allowed.example"},
+        json={
+            "agent_id": default_agent_id,
+            "message": "Allowed origin",
+        },
+    )
+    assert allowed_response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_public_polling_blocks_unlisted_widget_origin(
+    client, public_client, default_agent_id
+):
+    agent_response = await client.get("/api/v1/agent:default")
+    agent_id = agent_response.json()["id"]
+
+    await client.put(
+        f"/api/v1/agent?agent_id={agent_id}",
+        json={"allowed_widget_origins": ["https://allowed.example"]},
+    )
+
+    chat_response = await public_client.post(
+        "/api/v1/chat",
+        headers={"Origin": "https://allowed.example"},
+        json={
+            "agent_id": default_agent_id,
+            "message": "Allowed origin",
+        },
+    )
+    assert chat_response.status_code == 200
+    session_id = chat_response.json()["session_id"]
+
+    blocked_poll_response = await public_client.get(
+        f"/api/v1/chat/messages?session_id={session_id}",
+        headers={"Referer": "https://blocked.example/page"},
+    )
+    assert blocked_poll_response.status_code == 403
+    assert blocked_poll_response.json()["detail"] == "Widget origin not allowed"
+
+
+@pytest.mark.asyncio
+async def test_admin_chat_bypasses_widget_origin_whitelist(client, default_agent_id):
+    agent_response = await client.get("/api/v1/agent:default")
+    agent_id = agent_response.json()["id"]
+
+    await client.put(
+        f"/api/v1/agent?agent_id={agent_id}",
+        json={"allowed_widget_origins": ["https://allowed.example"]},
+    )
+
+    response = await client.post(
+        "/api/v1/chat",
+        json={
+            "agent_id": default_agent_id,
+            "message": "Admin bypass",
+        },
+    )
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_support_list_sessions(support_client):
+    response = await support_client.get("/api/v1/admin/sessions?skip=0&limit=10")
+    assert response.status_code == 200
+    data = response.json()
+    assert "items" in data
+
+
+@pytest.mark.asyncio
+async def test_support_takeover_and_send(
+    client, support_client, default_agent_id, setup_test_db
+):
+    """Support user must be assigned to agent to see and takeover sessions."""
+    from models import AdminUser, AgentMember
+    from services.auth_service import AuthService
+    import database
+    from sqlalchemy import select
+
+    async with database.AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(AdminUser).where(AdminUser.email == "test_support@example.com")
+        )
+        support_user = result.scalar_one_or_none()
+        assert support_user is not None
+
+        existing_member = await session.execute(
+            select(AgentMember).where(
+                AgentMember.agent_id == default_agent_id,
+                AgentMember.admin_user_id == support_user.id,
+            )
+        )
+        if not existing_member.scalar_one_or_none():
+            session.add(
+                AgentMember(
+                    agent_id=default_agent_id,
+                    admin_user_id=support_user.id,
+                    role="support",
+                )
+            )
+            await session.commit()
+
+    chat_response = await client.post(
+        "/api/v1/chat",
+        json={"agent_id": default_agent_id, "message": "Support takeover test"},
+    )
+    assert chat_response.status_code == 200
+    business_session_id = chat_response.json()["session_id"]
+
+    sessions_response = await support_client.get(
+        "/api/v1/admin/sessions?skip=0&limit=20"
+    )
+    assert sessions_response.status_code == 200
+    sessions = sessions_response.json()["items"]
+    matched = next(
+        item for item in sessions if item["session_id"] == business_session_id
+    )
+    db_session_id = matched["id"]
+
+    messages_response = await support_client.get(
+        f"/api/v1/admin/sessions/{db_session_id}/messages"
+    )
+    assert messages_response.status_code == 200
+    assert len(messages_response.json()) > 0
+
+    takeover_response = await support_client.post(
+        f"/api/v1/admin/sessions/{db_session_id}/takeover"
+    )
+    assert takeover_response.status_code == 200
+
+    send_response = await support_client.post(
+        "/api/v1/admin/sessions/send",
+        json={"session_id": db_session_id, "content": "Support reply"},
+    )
+    assert send_response.status_code == 200

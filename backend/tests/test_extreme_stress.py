@@ -1,0 +1,209 @@
+"""
+Extreme Stress Tests for Production Readiness
+This suite tests the system under extreme conditions to verify production readiness
+"""
+
+import pytest
+import asyncio
+import time
+
+
+class TestExtremeStress:
+    """Test suite for extreme stress conditions"""
+
+    @pytest.mark.asyncio
+    async def test_extreme_concurrent_chats(self, client):
+        """Test system with 100 concurrent chat requests"""
+        response = await client.get("/api/v1/agent:default")
+        agent_id = response.json()["id"]
+
+        async def send_chat(num: int):
+            try:
+                response = await client.post(
+                    "/api/v1/chat",
+                    json={
+                        "agent_id": agent_id,
+                        "message": f"Extreme stress test message {num}",
+                    },
+                )
+                return response.status_code == 200
+            except Exception:
+                return False
+
+        # Send 100 concurrent requests
+        start_time = time.time()
+        tasks = [send_chat(i) for i in range(100)]
+        results = await asyncio.gather(*tasks)
+        elapsed = time.time() - start_time
+
+        successful = sum(results)
+        assert successful >= 90, f"Only {successful}/100 succeeded under extreme stress"
+        assert elapsed < 30, f"Too slow: {elapsed:.2f}s for 100 requests"
+
+    @pytest.mark.asyncio
+    async def test_rapid_sequential_chats(self, client):
+        """Test system with 50 rapid sequential chat requests"""
+        response = await client.get("/api/v1/agent:default")
+        agent_id = response.json()["id"]
+
+        start_time = time.time()
+        success_count = 0
+
+        for i in range(50):
+            response = await client.post(
+                "/api/v1/chat",
+                json={
+                    "agent_id": agent_id,
+                    "message": f"Rapid sequential test {i}",
+                },
+            )
+            if response.status_code == 200:
+                success_count += 1
+
+        elapsed = time.time() - start_time
+
+        assert success_count >= 48, f"Only {success_count}/50 succeeded"
+        assert elapsed < 60, f"Too slow: {elapsed:.2f}s for 50 sequential requests"
+    @pytest.mark.asyncio
+    async def test_sustained_load(self, client):
+        """Test system under sustained load over time"""
+        response = await client.get("/api/v1/agent:default")
+        agent_id = response.json()["id"]
+
+        # Send 100 messages over 10 seconds
+        start_time = time.time()
+        success_count = 0
+        total_sent = 0
+
+        while total_sent < 100 and (time.time() - start_time) < 10:
+            # Send 10 messages at a time
+            tasks = [
+                client.post(
+                    "/api/v1/chat",
+                    json={
+                        "agent_id": agent_id,
+                        "message": f"Sustained load message {total_sent + i}",
+                    },
+                )
+                for i in range(10)
+            ]
+
+            results = await asyncio.gather(*tasks)
+            success_count += sum(1 for r in results if r.status_code == 200)
+            total_sent += 10
+
+            # Small delay to simulate realistic load
+            await asyncio.sleep(0.5)
+
+        elapsed = time.time() - start_time
+
+        # At least 90% success rate under sustained load
+        success_rate = success_count / total_sent
+        assert success_rate >= 0.90, f"Low success rate: {success_rate:.2%}"
+        assert elapsed < 45, f"Sustained load test took too long: {elapsed:.2f}s"
+
+    @pytest.mark.asyncio
+    async def test_session_isolation_under_load(self, client):
+        """Test session isolation remains correct under load"""
+        response = await client.get("/api/v1/agent:default")
+        agent_id = response.json()["id"]
+
+        # Create 20 different sessions simultaneously
+        async def chat_in_session(session_id: str):
+            responses = []
+            for i in range(3):
+                response = await client.post(
+                    "/api/v1/chat",
+                    json={
+                        "agent_id": agent_id,
+                        "session_id": session_id,
+                        "message": f"Session {session_id} message {i}",
+                    },
+                )
+                if response.status_code == 200:
+                    responses.append(response.json()["reply"])
+            return len(responses)
+
+        # Run 20 sessions concurrently
+        tasks = [chat_in_session(f"load_test_sess_{i}") for i in range(20)]
+        results = await asyncio.gather(*tasks)
+
+        # All sessions should complete all messages
+        assert all(r == 3 for r in results), "Session isolation failed under load"
+
+    @pytest.mark.asyncio
+    async def test_quota_accuracy_under_concurrent_load(self, client):
+        """Test quota tracking remains accurate under concurrent load"""
+        response = await client.get("/api/v1/agent:default")
+        agent_id = response.json()["id"]
+
+        # Get initial quota
+        response = await client.get(f"/api/v1/quota?agent_id={agent_id}")
+        initial_quota = response.json()
+        initial_messages = initial_quota["used_messages_today"]
+
+        # Send 20 concurrent chat requests
+        tasks = [
+            client.post(
+                "/api/v1/chat",
+                json={"agent_id": agent_id, "message": f"Quota test {i}"},
+            )
+            for i in range(20)
+        ]
+        results = await asyncio.gather(*tasks)
+
+        successful = sum(1 for r in results if r.status_code == 200)
+
+        # Check quota increased by exactly the number of successful requests
+        response = await client.get(f"/api/v1/quota?agent_id={agent_id}")
+        new_quota = response.json()
+        messages_sent = new_quota["used_messages_today"] - initial_messages
+
+        assert messages_sent == successful, f"Quota tracking inaccurate: {messages_sent} vs {successful}"
+
+    @pytest.mark.asyncio
+    async def test_error_recovery_under_stress(self, client):
+        """Test system recovers gracefully from errors under stress"""
+        response = await client.get("/api/v1/agent:default")
+        agent_id = response.json()["id"]
+
+        # Mix of valid and invalid requests
+        async def mixed_request(req_num: int):
+            try:
+                if req_num % 5 == 0:
+                    # Invalid agent ID (should error gracefully)
+                    return await client.post(
+                        "/api/v1/chat",
+                        json={"agent_id": "invalid_agent", "message": "test"},
+                    )
+                elif req_num % 5 == 1:
+                    # Empty message (should error or handle gracefully)
+                    return await client.post(
+                        "/api/v1/chat",
+                        json={"agent_id": agent_id, "message": ""},
+                    )
+                elif req_num % 5 == 2:
+                    # Non-existent URL (should 404)
+                    return await client.get(
+                        "/api/v1/agent?agent_id=nonexistent_agent_999999",
+                    )
+                else:
+                    # Valid request
+                    return await client.post(
+                        "/api/v1/chat",
+                        json={"agent_id": agent_id, "message": f"Valid test {req_num}"},
+                    )
+            except Exception:
+                return None
+
+        # 50 mixed requests
+        tasks = [mixed_request(i) for i in range(50)]
+        results = await asyncio.gather(*tasks)
+
+        # Count by status
+        success_200 = sum(1 for r in results if r and r.status_code == 200)
+        client_errors = sum(1 for r in results if r and 400 <= r.status_code < 500)
+
+        # System should handle errors gracefully without crashing
+        assert success_200 + client_errors == 50, "Some requests caused unexpected failures"
+        assert success_200 >= 20, "Too few valid requests succeeded"

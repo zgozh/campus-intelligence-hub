@@ -1,0 +1,86 @@
+# Chinese (Simplified) translations
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: zh_CN\n"
+
+# 认证相关
+msgid "Invalid credentials"
+msgstr "认证失败，请检查邮箱和密码"
+
+msgid "Not logged in"
+msgstr "未登录，请先登录"
+
+msgid "Session expired, please log in again"
+msgstr "登录已过期，请重新登录"
+
+msgid "User not found"
+msgstr "用户不存在"
+
+msgid "Account has been deactivated"
+msgstr "账户已被禁用"
+
+msgid "No account found with this email"
+msgstr "该邮箱未注册"
+
+msgid "Incorrect password"
+msgstr "密码错误"
+
+msgid "Email already registered"
+msgstr "邮箱已被注册"
+
+msgid "Password too short"
+msgstr "密码长度至少为8个字符"
+
+msgid "System already has an administrator"
+msgstr "系统已有管理员，请联系现有管理员进行账户管理"
+
+# API 错误
+msgid "Agent not found"
+msgstr "未找到指定的 Agent"
+
+msgid "Daily message quota exceeded"
+msgstr "今日消息配额已用完，请明天再试"
+
+msgid "URL fetching failed"
+msgstr "URL 抓取失败"
+
+msgid "Index rebuild failed"
+msgstr "索引重建失败"
+
+# API 响应
+msgid "Operation successful"
+msgstr "操作成功"
+
+msgid "URL added successfully"
+msgstr "URL 添加成功"
+
+msgid "QA item imported successfully"
+msgstr "Q&A 条目导入成功"
+
+msgid "Q&A item updated successfully"
+msgstr "Q&A 条目更新成功"
+
+msgid "Q&A item deleted successfully"
+msgstr "Q&A 条目删除成功"
+
+# 认证相关
+msgid "Too many login attempts. Please try again later."
+msgstr "登录尝试次数过多，请稍后再试"
+
+# 系统消息
+msgid "Request body too large"
+msgstr "请求体过大"
+
+# 文档处理错误
+msgid "Document processing failed. Please upload a valid, readable document and try again."
+msgstr "文档处理失败。请上传有效且可读取的文档后重试。"
+
+msgid "File content could not be read. Please upload a valid text document encoded as UTF-8."
+msgstr "无法读取文件内容。请上传使用 UTF-8 编码的有效文本文件。"
+
+msgid "No readable text could be found. Please upload a document that contains readable text."
+msgstr "未找到可读取的文本内容。请上传包含可读文本的文档。"
+
+msgid "File content does not match the selected document type. Please upload a valid, readable document."
+msgstr "文件内容与所选文档类型不匹配。请上传有效且可读取的文档。"
