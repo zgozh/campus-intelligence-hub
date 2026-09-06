@@ -1,0 +1,211 @@
+"""校务数据源与采集任务 API（EPIC 3 Source 域）。
+
+薄路由：本文件只做参数校验与委托，业务逻辑后续沉淀到 services/。
+Run Now 当前为 stub 状态机（EPIC 4 接入真实采集适配器）。
+"""
+
+import asyncio
+import logging
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from api.endpoints.auth import get_current_admin
+from api.v1.schemas import (
+    CollectionJobItem,
+    CollectionJobListResponse,
+    SourceCreate,
+    SourceItem,
+    SourceListResponse,
+    SourceRunResponse,
+    SourceUpdate,
+)
+from database import AsyncSessionLocal, get_db
+from models import AdminUser, CollectionJob, Source
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/v1")
+
+STAGES = ["Fetch", "Parse", "Clean", "Classify", "Dedup", "Index"]
+
+
+async def _execute_collection_stub(job_id: str) -> None:
+    """EPIC 3 采集执行 stub：模拟阶段流转，EPIC 4 替换为真实采集管线。"""
+    async with AsyncSessionLocal() as db:
+        job = await db.get(CollectionJob, job_id)
+        if not job:
+            return
+
+        job.status = "RUNNING"
+        job.started_at = datetime.now(timezone.utc)
+        job.stage_trace = {stage: "running" for stage in STAGES}
+        await db.commit()
+
+        # 模拟各阶段逐级完成（每次赋新 dict 触发 JSON 列变更检测）
+        trace: dict = {}
+        for stage in STAGES:
+            trace = {**trace, stage: "ok"}
+            job.stage_trace = trace
+            await db.commit()
+            await asyncio.sleep(0.2)
+
+        job.status = "SUCCESS"
+        job.result = {"fetched": 0, "indexed": 0, "errors": []}
+        job.completed_at = datetime.now(timezone.utc)
+        await db.commit()
+
+        source = await db.get(Source, job.source_id)
+        if source:
+            source.last_success_at = datetime.now(timezone.utc)
+            source.last_error = None
+            await db.commit()
+
+        logger.info("CollectionJob %s 完成", job_id)
+
+
+# ========== Source CRUD ==========
+
+
+@router.get("/sources", response_model=SourceListResponse)
+async def list_sources(
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Source).order_by(Source.created_at.desc()))
+    sources = result.scalars().all()
+    total = await db.scalar(select(func.count(Source.id)))
+    return SourceListResponse(sources=list(sources), total=total or 0)
+
+
+@router.post("/sources", response_model=SourceItem, status_code=status.HTTP_201_CREATED)
+async def create_source(
+    payload: SourceCreate,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    source = Source(
+        name=payload.name,
+        source_type=payload.source_type,
+        base_url=payload.base_url,
+        crawl_frequency=payload.crawl_frequency,
+    )
+    db.add(source)
+    await db.commit()
+    await db.refresh(source)
+    return source
+
+
+@router.get("/sources/{source_id}", response_model=SourceItem)
+async def get_source(
+    source_id: str,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    source = await db.get(Source, source_id)
+    if not source:
+        raise HTTPException(status_code=404, detail="数据源不存在")
+    return source
+
+
+@router.put("/sources/{source_id}", response_model=SourceItem)
+async def update_source(
+    source_id: str,
+    payload: SourceUpdate,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    source = await db.get(Source, source_id)
+    if not source:
+        raise HTTPException(status_code=404, detail="数据源不存在")
+
+    for field in ("name", "base_url", "crawl_frequency", "status"):
+        value = getattr(payload, field)
+        if value is not None:
+            setattr(source, field, value)
+
+    await db.commit()
+    await db.refresh(source)
+    return source
+
+
+@router.delete("/sources/{source_id}")
+async def delete_source(
+    source_id: str,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    source = await db.get(Source, source_id)
+    if not source:
+        raise HTTPException(status_code=404, detail="数据源不存在")
+    await db.delete(source)
+    await db.commit()
+    return {"deleted": True}
+
+
+@router.post("/sources/{source_id}/run", response_model=SourceRunResponse)
+async def run_source(
+    source_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    source = await db.get(Source, source_id)
+    if not source:
+        raise HTTPException(status_code=404, detail="数据源不存在")
+
+    job = CollectionJob(source_id=source_id, status="PENDING", params={"trigger": "manual"})
+    db.add(job)
+    source.last_crawled_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(job)
+
+    background_tasks.add_task(_execute_collection_stub, job.id)
+    return SourceRunResponse(job_id=job.id, status="PENDING")
+
+
+@router.post("/sources/{source_id}/pause", response_model=SourceItem)
+async def pause_source(
+    source_id: str,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    source = await db.get(Source, source_id)
+    if not source:
+        raise HTTPException(status_code=404, detail="数据源不存在")
+    source.status = "paused"
+    await db.commit()
+    await db.refresh(source)
+    return source
+
+
+# ========== CollectionJob ==========
+
+
+@router.get("/jobs", response_model=CollectionJobListResponse)
+async def list_jobs(
+    source_id: str | None = None,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    query = select(CollectionJob).order_by(CollectionJob.created_at.desc())
+    if source_id:
+        query = query.where(CollectionJob.source_id == source_id)
+    result = await db.execute(query)
+    jobs = result.scalars().all()
+    total = len(jobs)
+    return CollectionJobListResponse(jobs=list(jobs), total=total)
+
+
+@router.get("/jobs/{job_id}", response_model=CollectionJobItem)
+async def get_job(
+    job_id: str,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    job = await db.get(CollectionJob, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="采集任务不存在")
+    return job

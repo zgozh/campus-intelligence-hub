@@ -612,3 +612,66 @@ class KbChunk(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     document = relationship("KbDocument", back_populates="chunks")
+
+
+class Source(Base):
+    """校务数据源模型（spec §6.2）"""
+
+    __tablename__ = "sources"
+
+    id = Column(
+        String(50), primary_key=True, default=lambda: f"src_{uuid.uuid4().hex[:12]}"
+    )
+    name = Column(String(200), nullable=False)
+    source_type = Column(
+        SQLEnum("manual", "website", "list_page", "file", "api", name="source_type"),
+        nullable=False,
+        default="website",
+        index=True,
+    )
+    base_url = Column(String(1000), nullable=True)
+    crawl_frequency = Column(Integer, nullable=False, default=24)  # 采集间隔（小时）
+    status = Column(
+        SQLEnum("active", "paused", "error", name="source_status"),
+        nullable=False,
+        default="active",
+        index=True,
+    )
+    last_crawled_at = Column(DateTime(timezone=True), nullable=True)
+    last_success_at = Column(DateTime(timezone=True), nullable=True)
+    last_error = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    jobs = relationship(
+        "CollectionJob", back_populates="source", cascade="all, delete-orphan"
+    )
+
+
+class CollectionJob(Base):
+    """采集任务模型（spec §6.3）"""
+
+    __tablename__ = "collection_jobs"
+
+    id = Column(
+        String(50), primary_key=True, default=lambda: f"cjob_{uuid.uuid4().hex[:12]}"
+    )
+    source_id = Column(String(50), ForeignKey("sources.id"), nullable=False, index=True)
+    status = Column(
+        SQLEnum(
+            "PENDING", "RUNNING", "SUCCESS", "FAILED", "PARTIAL",
+            name="collection_job_status",
+        ),
+        nullable=False,
+        default="PENDING",
+        index=True,
+    )
+    stage_trace = Column(JSON, nullable=True)  # Fetch/Parse/Clean/Classify/Dedup/Index 各阶段
+    params = Column(JSON, nullable=True)
+    result = Column(JSON, nullable=True)  # {"fetched": n, "indexed": n, "errors": []}
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    source = relationship("Source", back_populates="jobs")

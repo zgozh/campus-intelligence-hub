@@ -857,3 +857,79 @@ class RetrieveResponse(BaseModel):
     """Wrapper for consistency"""
 
     results: List[RetrieveChunk] = []
+
+
+# ========== Campus Source & CollectionJob Schemas (EPIC 3) ==========
+
+
+class SourceCreate(BaseModel):
+    """创建数据源请求"""
+
+    name: str = Field(..., min_length=1, max_length=200)
+    source_type: Literal["manual", "website", "list_page", "file", "api"] = "website"
+    base_url: Optional[str] = Field(None, max_length=1000)
+    crawl_frequency: int = Field(24, ge=1, le=720)
+
+
+class SourceUpdate(BaseModel):
+    """更新数据源请求"""
+
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    base_url: Optional[str] = Field(None, max_length=1000)
+    crawl_frequency: Optional[int] = Field(None, ge=1, le=720)
+    status: Optional[Literal["active", "paused", "error"]] = None
+
+
+class SourceItem(BaseModel):
+    """数据源响应项"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    source_type: str
+    base_url: Optional[str] = None
+    crawl_frequency: int = 24
+    status: str
+    last_crawled_at: Optional[datetime] = None
+    last_success_at: Optional[datetime] = None
+    last_error: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+class SourceListResponse(BaseModel):
+    """数据源列表响应"""
+
+    sources: List[SourceItem]
+    total: int
+
+
+class SourceRunResponse(BaseModel):
+    """Run Now 响应"""
+
+    job_id: str
+    status: str
+
+
+class CollectionJobItem(BaseModel):
+    """采集任务响应项"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    source_id: str
+    status: str
+    stage_trace: Optional[Dict[str, Any]] = None
+    result: Optional[Dict[str, Any]] = None
+    error_message: Optional[str] = None
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+
+class CollectionJobListResponse(BaseModel):
+    """采集任务列表响应"""
+
+    jobs: List[CollectionJobItem]
+    total: int

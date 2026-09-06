@@ -11,6 +11,7 @@ from database import init_db
 from api.endpoints import auth
 from api.v1 import endpoints as v1_endpoints
 from api.v1 import kb_document_endpoints as v1_kb_doc_endpoints
+from api.v1 import source_endpoints
 from services.scheduler import (
     agent_purge_scheduler,
     url_fetch_scheduler,
@@ -198,6 +199,7 @@ app.include_router(auth.router, prefix="/api/admin", tags=["auth"])
 # v1 API
 app.include_router(v1_endpoints.router, tags=["v1"])
 app.include_router(v1_kb_doc_endpoints.router, tags=["kb-documents"])
+app.include_router(source_endpoints.router, tags=["sources"])
 
 
 # SDK.js 路由 - 用于嵌入 widget
