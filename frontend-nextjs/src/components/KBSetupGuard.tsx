@@ -156,7 +156,7 @@ export default function KBSetupGuard({ agentId, children, mode = "blocking" }: K
           }}>
             <img
               src="/logo.png"
-              alt="Basjoo Logo"
+              alt="校务智汇中台 Logo"
               style={{
                 width: '64px',
                 height: '64px',

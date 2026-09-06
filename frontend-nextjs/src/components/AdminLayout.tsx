@@ -388,7 +388,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 						>
 							<img
 								src="/logo.png"
-								alt="Basjoo Logo"
+								alt="校务智汇中台 Logo"
 								style={{
 									width: "100%",
 									height: "100%",
@@ -820,7 +820,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 								backgroundClip: "text",
 							}}
 						>
-							Basjoo AI
+							校务智汇中台
 						</span>
 					</Link>
 					<div style={{ width: "40px" }} />

@@ -100,7 +100,7 @@ export const Login = () => {
 					>
 						<img
 							src="/logo.png"
-							alt="Basjoo Logo"
+							alt="校务智汇中台 Logo"
 							style={{
 								width: "100%",
 								height: "100%",
@@ -120,7 +120,7 @@ export const Login = () => {
 							WebkitTextFillColor: "transparent",
 						}}
 					>
-						Basjoo
+						校务智汇中台
 					</h1>
 					<p
 						style={{

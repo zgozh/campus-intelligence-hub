@@ -1,6 +1,6 @@
 {
-  "appName": "Basjoo",
-  "tagline": "智能系统",
+  "appName": "校务智汇中台",
+  "tagline": "AI 自动数据采集与知识管理中台",
   "theme": {
     "light": "浅色模式",
     "dark": "深色模式",
@@ -270,7 +270,7 @@
       "crawlInProgress": "有URL正在抓取中，请等待完成后再保存",
       "rebuildInProgress": "索引正在重建中，请稍候再试"
     },
-    "welcomeMessage": "您好！我是Basjoo助手，有什么可以帮您的吗？",
+    "welcomeMessage": "您好！我是校务智汇助手，有什么可以帮您的吗？",
     "widgetTitle": "窗口标题",
     "themeColor": "主题颜色",
     "previewEffect": "预览效果",
@@ -278,7 +278,7 @@
     "welcomeMessageSettingsDesc": "访客打开聊天窗口时看到的第一条消息。",
     "welcomeMessageTip1": "建议使用友好、专业的问候语。",
     "welcomeMessageTip2": "可以简要说明客服的功能和服务范围。",
-    "welcomeMessageExample": "示例：「您好！我是Basjoo助手，有什么可以帮您的吗？」",
+    "welcomeMessageExample": "示例：「您好！我是校务智汇助手，有什么可以帮您的吗？」",
     "firstMessageDesc": "访客打开聊天窗口时显示的第一条消息",
     "historyRetention": "历史对话保留天数",
     "historyRetentionDesc": "设置对话记录的保留时间。",
@@ -432,7 +432,7 @@
     "firstMessageSettingsDesc": "访客打开聊天窗口时看到的第一条消息。",
     "friendlyGreeting": "建议使用友好、专业的问候语。",
     "explainService": "可以简要说明客服的功能和服务范围。",
-    "exampleMessage": "示例：「您好！我是Basjoo助手，有什么可以帮您的吗？」",
+    "exampleMessage": "示例：「您好！我是校务智汇助手，有什么可以帮您的吗？」",
     "firstMessageDisplay": "访客打开聊天窗口时显示的第一条消息",
     "retentionDays": "历史对话保留天数",
     "retentionDaysDesc": "设置对话记录的保留时间。",

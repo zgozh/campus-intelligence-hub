@@ -181,7 +181,7 @@ export const Register = () => {
 					>
 						<img
 							src="/logo.png"
-							alt="Basjoo Logo"
+							alt="校务智汇中台 Logo"
 							style={{
 								width: "100%",
 								height: "100%",
@@ -201,7 +201,7 @@ export const Register = () => {
 							WebkitTextFillColor: "transparent",
 						}}
 					>
-						Basjoo
+						校务智汇中台
 					</h1>
 					<p
 						style={{
