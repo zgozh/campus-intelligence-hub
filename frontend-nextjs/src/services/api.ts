@@ -1085,6 +1085,16 @@ class APIService {
 	async getRadar(): Promise<RadarStats> {
 		return this.request(`/api/v1/radar`);
 	}
+
+	async generateDigest(period = "daily"): Promise<DigestItem> {
+		return this.request(`/api/v1/digests/generate?period=${period}`, {
+			method: "POST",
+		});
+	}
+
+	async listDigests(): Promise<{ digests: DigestItem[]; total: number }> {
+		return this.request(`/api/v1/digests`);
+	}
 }
 
 export interface CampusSource {
@@ -1123,6 +1133,14 @@ export interface RadarStats {
 	published: number;
 	expired: number;
 	source_activity: { name: string; count: number }[];
+}
+
+export interface DigestItem {
+	id: string;
+	period: string;
+	title: string;
+	content: string;
+	created_at: string;
 }
 
 export const api = new APIService();

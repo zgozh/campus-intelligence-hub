@@ -987,3 +987,25 @@ class ReviewTaskListResponse(BaseModel):
 
     tasks: List[ReviewTaskItem]
     total: int
+
+
+# ========== Digest Schemas (EPIC 11) ==========
+
+
+class DigestItem(BaseModel):
+    """日报/周报项"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    period: str
+    title: str
+    content: str
+    created_at: datetime
+
+
+class DigestListResponse(BaseModel):
+    """日报/周报列表响应"""
+
+    digests: List[DigestItem]
+    total: int

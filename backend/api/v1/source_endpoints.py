@@ -25,9 +25,18 @@ from api.v1.schemas import (
     SourceUpdate,
 )
 from database import get_db
-from models import AdminUser, CollectionJob, Conflict, KnowledgeObject, ReviewTask, Source
+from models import (
+    AdminUser,
+    CollectionJob,
+    Conflict,
+    Digest,
+    KnowledgeObject,
+    ReviewTask,
+    Source,
+)
 from services.collection_service import run_collection
 from services.conflict_service import detect_conflicts
+from services.digest_service import generate_digest
 from services.freshness_service import refresh_freshness
 from services.radar_service import radar_stats
 from services.review_service import approve_task, build_review_queue, reject_task
@@ -287,3 +296,38 @@ async def get_radar(
 ):
     """知识雷达运营统计。"""
     return await radar_stats(db)
+
+
+# ========== Digest (EPIC 11) ==========
+
+
+@router.post("/digests/generate")
+async def generate_digest_endpoint(
+    period: str = "daily",
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """生成日报/周报。"""
+    return await generate_digest(db, period)
+
+
+@router.get("/digests")
+async def list_digests(
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Digest).order_by(Digest.created_at.desc()))
+    digests = result.scalars().all()
+    return {"digests": list(digests), "total": len(digests)}
+
+
+@router.get("/digests/{digest_id}")
+async def get_digest(
+    digest_id: str,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    digest = await db.get(Digest, digest_id)
+    if not digest:
+        raise HTTPException(status_code=404, detail="日报不存在")
+    return digest

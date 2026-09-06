@@ -75,7 +75,8 @@
     "users": "Users",
     "sources": "Sources",
     "jobs": "Collection Jobs",
-    "radar": "Knowledge Radar"
+    "radar": "Knowledge Radar",
+    "digests": "Digests"
   },
   "errors": {
     "required": "This field is required",

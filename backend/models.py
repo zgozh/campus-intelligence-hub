@@ -773,3 +773,17 @@ class ReviewTask(Base):
     reviewed_by = Column(String(50), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class Digest(Base):
+    """自动日报/周报（spec §13 / §24 Digest）。"""
+
+    __tablename__ = "digests"
+
+    id = Column(
+        String(50), primary_key=True, default=lambda: f"dg_{uuid.uuid4().hex[:12]}"
+    )
+    period = Column(String(20), nullable=False, default="daily")  # daily/weekly
+    title = Column(String(200), nullable=False)
+    content = Column(Text, nullable=False)  # Markdown
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
