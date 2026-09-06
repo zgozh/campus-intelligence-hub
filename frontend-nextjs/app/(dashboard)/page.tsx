@@ -1,5 +1,5 @@
-import AgentPanel from '../../src/views/AgentPanel';
+import Dashboard from '../../src/views/Dashboard';
 
 export default function Page() {
-  return <AgentPanel />;
+  return <Dashboard />;
 }

@@ -292,7 +292,15 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 				}))
 		: isSuperAdmin
 			? navItemsConfig.filter(
-					(item) => item.path === "/" || item.path === "/agents",
+					(item) =>
+						![
+							"/agents",
+							"/knowledge",
+							"/playground",
+							"/sessions",
+							"/users",
+							"/settings/agent",
+						].includes(item.path),
 				)
 			: []; // Non-super users at root level should redirect, show no nav
 
