@@ -24,8 +24,7 @@ export const AdminUsers = () => {
   const { t } = useTranslation();
   const { agentId } = useParams<{ agentId?: string }>();
   const isMobile = useIsMobile();
-  const { token, admin } = useAuth();
-  const isSuperAdmin = admin?.role === 'super_admin';
+  const { token } = useAuth();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
@@ -54,17 +53,6 @@ export const AdminUsers = () => {
         return;
       }
 
-      if (!isSuperAdmin && admin) {
-        setUsers([{
-          id: admin.id,
-          email: admin.email,
-          name: admin.name,
-          is_active: true,
-          role: admin.role as AdminRole,
-        }]);
-        return;
-      }
-
       const res = await fetch('/api/admin/users', { headers: authHeaders });
       if (!res.ok) throw new Error(await parseErrorResponse(res) || t('users.loadUsersFailed'));
       const data = await res.json();
@@ -74,7 +62,7 @@ export const AdminUsers = () => {
 useEffect(() => {
   if (!token) return;
   loadUsers().catch((err) => setError(err.message));
-}, [token, isSuperAdmin, admin]);
+}, [token]);
 
 useEffect(() => {
   if (!agentId) return;
@@ -212,7 +200,7 @@ useEffect(() => {
 
       {message && <div style={{ color: 'var(--color-success)', marginBottom: 'var(--space-4)' }}>{message}</div>}
       {error && <div style={{ color: 'var(--color-error)', marginBottom: 'var(--space-4)' }}>{error}</div>}
-      {isSuperAdmin && (<div className="liquid-glass-card" style={{ padding: 'var(--space-6)', marginBottom: 'var(--space-6)' }}>
+      <div className="liquid-glass-card" style={{ padding: 'var(--space-6)', marginBottom: 'var(--space-6)' }}>
         <h2 style={{ fontSize: 'var(--text-lg)', marginBottom: 'var(--space-5)' }}>{t('users.addAdmin')}</h2>
         <form onSubmit={createUser} style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr 180px auto', gap: 'var(--space-4)', alignItems: isMobile ? 'stretch' : 'end' }}>
           <label>{t('users.email')}<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
@@ -225,7 +213,6 @@ useEffect(() => {
           <button type="submit" style={{ minHeight: isMobile ? '44px' : undefined, width: isMobile ? '100%' : undefined }}>{t('users.create')}</button>
         </form>
       </div>
-	)}
       <div className="liquid-glass-card" style={{ padding: isMobile ? 'var(--space-4)' : 'var(--space-6)' }}>
         <h2 style={{ fontSize: 'var(--text-lg)', marginBottom: 'var(--space-5)' }}>{t('users.adminList')}</h2>
 
@@ -277,12 +264,10 @@ useEffect(() => {
                     <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', marginBottom: 'var(--space-3)' }}>
                       {t(`users.roleLabels.${user.role}`)}
                     </div>
-                    {isSuperAdmin && (
-                      <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                        <button onClick={() => startEdit(user)} className="btn-ghost" style={{ flex: 1, minHeight: '44px' }}>{t('users.edit')}</button>
-                        <button onClick={() => deleteUser(user.id)} className="btn-ghost" style={{ flex: 1, minHeight: '44px', color: 'var(--color-error)' }}>{t('users.delete')}</button>
-                      </div>
-                    )}
+                    <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                      <button onClick={() => startEdit(user)} className="btn-ghost" style={{ flex: 1, minHeight: '44px' }}>{t('users.edit')}</button>
+                      <button onClick={() => deleteUser(user.id)} className="btn-ghost" style={{ flex: 1, minHeight: '44px', color: 'var(--color-error)' }}>{t('users.delete')}</button>
+                    </div>
                   </>
                 )}
               </div>
@@ -298,7 +283,7 @@ useEffect(() => {
                   <th style={{ textAlign: 'left', padding: '12px' }}>{t('users.name')}</th>
                   <th style={{ textAlign: 'left', padding: '12px' }}>{t('users.role')}</th>
                   <th style={{ textAlign: 'left', padding: '12px' }}>{t('users.status')}</th>
-                  {isSuperAdmin && <th style={{ textAlign: 'right', padding: '12px' }}>{t('users.actions')}</th>}
+                  <th style={{ textAlign: 'right', padding: '12px' }}>{t('users.actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -313,7 +298,6 @@ useEffect(() => {
                       </select>
                     ) : t(`users.roleLabels.${user.role}`)}</td>
                     <td style={{ padding: '12px' }}>{editingId === user.id ? <label><input type="checkbox" checked={editData.is_active} onChange={(e) => setEditData({ ...editData, is_active: e.target.checked })} /> {t('users.statusEnabled')}</label> : user.is_active ? t('users.statusEnabled') : t('users.statusDisabled')}</td>
-                    {isSuperAdmin && (
                       <td style={{ padding: '12px', textAlign: 'right' }}>
                         {editingId === user.id ? (
                           <>
@@ -328,7 +312,6 @@ useEffect(() => {
                           </>
                         )}
                       </td>
-                    )}
                   </tr>
                 ))}
               </tbody>

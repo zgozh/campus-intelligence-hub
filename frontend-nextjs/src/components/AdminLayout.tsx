@@ -65,8 +65,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <Layout style={{ minHeight: "100vh" }}>
       <Sider
         width={220}
-        style={{ position: "sticky", top: 0, height: "100vh", overflow: "auto", display: "flex", flexDirection: "column" }}
+        style={{ position: "sticky", top: 0, height: "100vh", overflow: "hidden" }}
       >
+        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
         <div
           style={{
             height: 64,
@@ -88,7 +89,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           selectedKeys={[selectedKey]}
           items={menuItems}
           onClick={({ key }) => navigate(key)}
-          style={{ flex: 1, borderRight: 0 }}
+          style={{ flex: 1, borderRight: 0, overflow: "auto" }}
         />
         <div
           style={{
@@ -104,6 +105,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <Button block icon={<LogoutOutlined />} onClick={handleLogout}>
             退出登录
           </Button>
+        </div>
         </div>
       </Sider>
 

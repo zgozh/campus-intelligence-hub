@@ -154,11 +154,8 @@ VALID_ADMIN_ROLES = {"super_admin", "admin", "support"}
 
 
 def require_super_admin(current_admin: AdminUser):
-    if current_admin.role != "super_admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only super administrators can manage users",
-        )
+    # 展示项目：所有已登录账号均可用用户管理，不再限制 super_admin
+    return current_admin
 
 
 async def require_admin_or_super_admin(
