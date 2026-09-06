@@ -1066,8 +1066,12 @@ class APIService {
 		return this.request(`/api/v1/sources/${id}`, { method: "DELETE" });
 	}
 
-	async runSource(id: string): Promise<{ job_id: string; status: string }> {
-		return this.request(`/api/v1/sources/${id}/run`, { method: "POST" });
+	async runSource(id: string, maxPages?: number, column?: string): Promise<{ job_id: string; status: string }> {
+		const params = new URLSearchParams();
+		if (maxPages !== undefined) params.set("max_pages", String(maxPages));
+		if (column) params.set("column", column);
+		const q = params.toString() ? `?${params.toString()}` : "";
+		return this.request(`/api/v1/sources/${id}/run${q}`, { method: "POST" });
 	}
 
 	async pauseSource(id: string): Promise<CampusSource> {
@@ -1211,6 +1215,7 @@ export interface KnowledgeObject {
 	facts?: { field: string; value: string }[] | null;
 	tags?: string[] | null;
 	summary?: string | null;
+	content?: string | null;
 	source_url?: string | null;
 	created_at?: string | null;
 }

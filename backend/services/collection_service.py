@@ -54,13 +54,21 @@ async def run_collection(job_id: str) -> None:
             if adapter is None:
                 raise RuntimeError(f"无法识别该 URL 的站点适配器: {source.base_url}")
 
+            params = job.params or {}
+            max_pages = params.get("max_pages", 1) or 1
+            column = params.get("column")
+
             engine = CrawlEngine()
             try:
                 articles, failures, _ = await engine.fetch_source(
-                    source.base_url, adapter, max_pages=source.max_pages or 1
+                    source.base_url, adapter, max_pages=max_pages
                 )
             finally:
                 await engine.close()
+
+            # 按内容筛选（栏目）过滤采集结果
+            if column:
+                articles = [a for a in articles if a.column == column]
 
             job.stage_trace = {**job.stage_trace, "Fetch": "ok", "Parse": "running"}
             await db.commit()

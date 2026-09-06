@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Avatar, Dropdown, Layout, Menu, Space, theme } from "antd";
+import { Avatar, Button, Layout, Menu, theme } from "antd";
 import {
   CheckCircleOutlined,
   DashboardOutlined,
@@ -63,7 +63,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
-      <Sider width={220} style={{ position: "sticky", top: 0, height: "100vh", overflow: "auto" }}>
+      <Sider
+        width={220}
+        style={{ position: "sticky", top: 0, height: "100vh", overflow: "auto", display: "flex", flexDirection: "column" }}
+      >
         <div
           style={{
             height: 64,
@@ -74,6 +77,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             fontSize: 17,
             fontWeight: 700,
             letterSpacing: 1,
+            flexShrink: 0,
           }}
         >
           校务智汇中台
@@ -84,7 +88,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           selectedKeys={[selectedKey]}
           items={menuItems}
           onClick={({ key }) => navigate(key)}
+          style={{ flex: 1, borderRight: 0 }}
         />
+        <div
+          style={{
+            padding: 16,
+            borderTop: "1px solid rgba(255,255,255,0.12)",
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <Avatar style={{ background: token.colorPrimary }} icon={<UserOutlined />} />
+            <span style={{ color: "#fff", fontSize: 14 }}>{admin?.name || admin?.email || "管理员"}</span>
+          </div>
+          <Button block icon={<LogoutOutlined />} onClick={handleLogout}>
+            退出登录
+          </Button>
+        </div>
       </Sider>
 
       <Layout>
@@ -92,26 +112,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           style={{
             background: token.colorBgContainer,
             padding: "0 24px",
-            display: "flex",
-            justifyContent: "flex-end",
-            alignItems: "center",
             borderBottom: `1px solid ${token.colorBorderSecondary}`,
           }}
-        >
-          <Dropdown
-            menu={{
-              items: [
-                { key: "logout", icon: <LogoutOutlined />, label: "退出登录", onClick: handleLogout },
-              ],
-            }}
-          >
-            <Space style={{ cursor: "pointer" }}>
-              <Avatar style={{ background: token.colorPrimary }} icon={<UserOutlined />} />
-              <span>{admin?.name || admin?.email || "管理员"}</span>
-            </Space>
-          </Dropdown>
-        </Header>
-
+        />
         <Content style={{ padding: 24, background: token.colorBgLayout, minHeight: "calc(100vh - 64px)" }}>
           {children}
         </Content>

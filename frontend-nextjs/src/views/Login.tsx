@@ -295,7 +295,7 @@ export const Login = () => {
 					</form>
 				</div>
 
-				{bootstrapRequired && (
+				{(
 					<p
 						style={{
 							textAlign: "center",

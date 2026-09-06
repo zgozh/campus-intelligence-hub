@@ -131,12 +131,17 @@ async def run_source(
     background_tasks: BackgroundTasks,
     current_user: AdminUser = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
+    max_pages: int = 1,
+    column: str | None = None,
 ):
     source = await db.get(Source, source_id)
     if not source:
         raise HTTPException(status_code=404, detail="数据源不存在")
 
-    job = CollectionJob(source_id=source_id, status="PENDING", params={"trigger": "manual"})
+    params = {"trigger": "manual", "max_pages": max_pages}
+    if column:
+        params["column"] = column
+    job = CollectionJob(source_id=source_id, status="PENDING", params=params)
     db.add(job)
     source.last_crawled_at = datetime.now(timezone.utc)
     await db.commit()

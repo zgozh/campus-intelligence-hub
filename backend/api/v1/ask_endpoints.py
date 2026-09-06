@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.endpoints.auth import get_current_admin
 from database import get_db
-from models import AdminUser, KnowledgeObject
+from models import AdminUser, KnowledgeObject, RawDocument
 from services.ask_service import ask
 from services.search_service import search_knowledge
 
@@ -61,13 +61,17 @@ async def list_knowledge_objects(
     db: AsyncSession = Depends(get_db),
 ):
     """知识对象列表。"""
-    query = select(KnowledgeObject).order_by(KnowledgeObject.created_at.desc())
+    query = (
+        select(KnowledgeObject, RawDocument.content)
+        .outerjoin(RawDocument, KnowledgeObject.raw_document_id == RawDocument.id)
+        .order_by(KnowledgeObject.created_at.desc())
+    )
     if type:
         query = query.where(KnowledgeObject.type == type)
     if status:
         query = query.where(KnowledgeObject.status == status)
     result = await db.execute(query)
-    kos = result.scalars().all()
+    rows = result.all()
     return {
         "objects": [
             {
@@ -83,10 +87,11 @@ async def list_knowledge_objects(
                 "facts": ko.facts,
                 "tags": ko.tags,
                 "summary": ko.summary,
+                "content": content,
                 "source_url": ko.source_url,
                 "created_at": ko.created_at.isoformat() if ko.created_at else None,
             }
-            for ko in kos
+            for ko, content in rows
         ],
-        "total": len(kos),
+        "total": len(rows),
     }

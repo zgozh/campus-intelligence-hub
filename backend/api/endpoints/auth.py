@@ -218,15 +218,6 @@ async def register(
         admin_count_result = await db.execute(select(func.count(AdminUser.id)))
         admin_count = admin_count_result.scalar() or 0
 
-        # Only allow unauthenticated first-time super-admin bootstrap.
-        # After the first admin exists, all further admin creation must go
-        # through the authenticated /api/admin/users endpoint.
-        if admin_count > 0:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=_("System already has an administrator", locale=locale),
-            )
-
         result = await db.execute(select(AdminUser).where(AdminUser.email == req.email))
         existing_admin = result.scalar_one_or_none()
 
@@ -242,25 +233,38 @@ async def register(
                 detail=_("Password too short", locale=locale),
             )
 
-        # Create default workspace and quota for first admin
-        workspace = Workspace(
-            name="Default Workspace",
-            owner_email=req.email,
-        )
-        db.add(workspace)
-        await db.flush()
+        if admin_count > 0:
+            # 系统已初始化：注册普通管理员，加入默认工作空间
+            default_admin = (
+                await db.execute(select(AdminUser).order_by(AdminUser.id).limit(1))
+            ).scalar_one()
+            admin = await auth_service.create_admin(
+                email=req.email,
+                password=req.password,
+                name=req.name,
+                role="admin",
+                workspace_id=default_admin.workspace_id,
+            )
+        else:
+            # 首次初始化：创建超级管理员 + 默认工作空间与配额
+            workspace = Workspace(
+                name="Default Workspace",
+                owner_email=req.email,
+            )
+            db.add(workspace)
+            await db.flush()
 
-        quota = WorkspaceQuota(workspace_id=workspace.id)
-        db.add(quota)
-        await db.flush()
+            quota = WorkspaceQuota(workspace_id=workspace.id)
+            db.add(quota)
+            await db.flush()
 
-        admin = await auth_service.create_admin(
-            email=req.email,
-            password=req.password,
-            name=req.name,
-            role="super_admin",
-            workspace_id=workspace.id,
-        )
+            admin = await auth_service.create_admin(
+                email=req.email,
+                password=req.password,
+                name=req.name,
+                role="super_admin",
+                workspace_id=workspace.id,
+            )
 
     access_token = auth_service.create_access_token(data={"sub": str(admin.id)})
     return LoginResponse(
