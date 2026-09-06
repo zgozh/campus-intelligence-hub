@@ -1,10 +1,8 @@
-"""校务数据源与采集任务 API（EPIC 3 Source 域）。
+"""校务数据源与采集任务 API（EPIC 3-4 Source 域）。
 
-薄路由：本文件只做参数校验与委托，业务逻辑后续沉淀到 services/。
-Run Now 当前为 stub 状态机（EPIC 4 接入真实采集适配器）。
+薄路由：本文件只做参数校验与委托，采集执行委托给 services/collection_service.py。
 """
 
-import asyncio
 import logging
 from datetime import datetime, timezone
 
@@ -22,48 +20,13 @@ from api.v1.schemas import (
     SourceRunResponse,
     SourceUpdate,
 )
-from database import AsyncSessionLocal, get_db
+from database import get_db
 from models import AdminUser, CollectionJob, Source
+from services.collection_service import run_collection
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1")
-
-STAGES = ["Fetch", "Parse", "Clean", "Classify", "Dedup", "Index"]
-
-
-async def _execute_collection_stub(job_id: str) -> None:
-    """EPIC 3 采集执行 stub：模拟阶段流转，EPIC 4 替换为真实采集管线。"""
-    async with AsyncSessionLocal() as db:
-        job = await db.get(CollectionJob, job_id)
-        if not job:
-            return
-
-        job.status = "RUNNING"
-        job.started_at = datetime.now(timezone.utc)
-        job.stage_trace = {stage: "running" for stage in STAGES}
-        await db.commit()
-
-        # 模拟各阶段逐级完成（每次赋新 dict 触发 JSON 列变更检测）
-        trace: dict = {}
-        for stage in STAGES:
-            trace = {**trace, stage: "ok"}
-            job.stage_trace = trace
-            await db.commit()
-            await asyncio.sleep(0.2)
-
-        job.status = "SUCCESS"
-        job.result = {"fetched": 0, "indexed": 0, "errors": []}
-        job.completed_at = datetime.now(timezone.utc)
-        await db.commit()
-
-        source = await db.get(Source, job.source_id)
-        if source:
-            source.last_success_at = datetime.now(timezone.utc)
-            source.last_error = None
-            await db.commit()
-
-        logger.info("CollectionJob %s 完成", job_id)
 
 
 # ========== Source CRUD ==========
@@ -162,7 +125,7 @@ async def run_source(
     await db.commit()
     await db.refresh(job)
 
-    background_tasks.add_task(_execute_collection_stub, job.id)
+    background_tasks.add_task(run_collection, job.id)
     return SourceRunResponse(job_id=job.id, status="PENDING")
 
 

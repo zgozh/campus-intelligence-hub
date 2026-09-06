@@ -675,3 +675,27 @@ class CollectionJob(Base):
     completed_at = Column(DateTime(timezone=True), nullable=True)
 
     source = relationship("Source", back_populates="jobs")
+
+
+class RawDocument(Base):
+    """采集到的原始文档（spec §24 RawDocument）。"""
+
+    __tablename__ = "raw_documents"
+
+    id = Column(
+        String(50), primary_key=True, default=lambda: f"rdoc_{uuid.uuid4().hex[:12]}"
+    )
+    source_id = Column(String(50), ForeignKey("sources.id"), nullable=False, index=True)
+    url = Column(String(1000), nullable=False, index=True)
+    normalized_url = Column(String(1000), nullable=False, index=True)
+    title = Column(String(500), nullable=False)
+    content = Column(Text, nullable=True)  # 清洗后正文
+    content_hash = Column(String(64), nullable=True, index=True)  # 去重
+    publish_time = Column(String(20), nullable=True)
+    fetched_at = Column(DateTime(timezone=True), server_default=func.now())
+    source_site = Column(String(50), nullable=True)
+    column = Column(String(50), nullable=True)
+    department = Column(String(100), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    source = relationship("Source", backref="documents")

@@ -28,6 +28,10 @@ google-generativeai==0.8.3
 # URL抓取 - 通过 Scrapling 微服务处理，后端无需额外依赖
 requests==2.31.0
 
+# 校务采集适配器（gzhu/gznews 迁移）
+selectolax==0.3.21
+trafilatura==2.0.0
+
 # Redis - 缓存、限流、任务队列
 redis==5.2.1
 aioredis==2.0.1
