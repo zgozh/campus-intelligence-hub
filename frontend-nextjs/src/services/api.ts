@@ -1081,6 +1081,10 @@ class APIService {
 	async getJob(id: string): Promise<CollectionJob> {
 		return this.request(`/api/v1/jobs/${id}`);
 	}
+
+	async getRadar(): Promise<RadarStats> {
+		return this.request(`/api/v1/radar`);
+	}
 }
 
 export interface CampusSource {
@@ -1107,6 +1111,18 @@ export interface CollectionJob {
 	created_at: string;
 	started_at?: string | null;
 	completed_at?: string | null;
+}
+
+export interface RadarStats {
+	new_today: number;
+	review_pending: number;
+	conflict_open: number;
+	expiring: number;
+	source_error: number;
+	total_ko: number;
+	published: number;
+	expired: number;
+	source_activity: { name: string; count: number }[];
 }
 
 export const api = new APIService();

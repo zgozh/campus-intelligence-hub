@@ -74,7 +74,8 @@
     "agents": "智能体",
     "users": "用户管理",
     "sources": "数据源管理",
-    "jobs": "采集任务"
+    "jobs": "采集任务",
+    "radar": "知识雷达"
   },
   "errors": {
     "required": "此字段为必填项",

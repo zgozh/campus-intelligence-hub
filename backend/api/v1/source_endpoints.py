@@ -29,6 +29,7 @@ from models import AdminUser, CollectionJob, Conflict, KnowledgeObject, ReviewTa
 from services.collection_service import run_collection
 from services.conflict_service import detect_conflicts
 from services.freshness_service import refresh_freshness
+from services.radar_service import radar_stats
 from services.review_service import approve_task, build_review_queue, reject_task
 
 logger = logging.getLogger(__name__)
@@ -274,3 +275,15 @@ async def reject_review_task(
     db: AsyncSession = Depends(get_db),
 ):
     return await reject_task(db, task_id, current_user.id)
+
+
+# ========== Knowledge Radar (EPIC 10) ==========
+
+
+@router.get("/radar")
+async def get_radar(
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """知识雷达运营统计。"""
+    return await radar_stats(db)

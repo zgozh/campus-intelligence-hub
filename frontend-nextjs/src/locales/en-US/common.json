@@ -74,7 +74,8 @@
     "agents": "Agents",
     "users": "Users",
     "sources": "Sources",
-    "jobs": "Collection Jobs"
+    "jobs": "Collection Jobs",
+    "radar": "Knowledge Radar"
   },
   "errors": {
     "required": "This field is required",
