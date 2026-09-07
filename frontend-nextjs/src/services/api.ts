@@ -1171,6 +1171,11 @@ class APIService {
 		return this.request(`/api/v1/insights?limit=${limit}`);
 	}
 
+	// 三层 Agent 智能运营闭环 (G)
+	async runClosedLoop(collect = false): Promise<ClosedLoopResult> {
+		return this.request(`/api/v1/closed-loop/run?collect=${collect}`, { method: "POST" });
+	}
+
 	// Knowledge Object APIs
 	async listKnowledgeObjects(): Promise<{ objects: KnowledgeObject[]; total: number }> {
 		return this.request(`/api/v1/knowledge-objects`);
@@ -1351,6 +1356,19 @@ export interface InsightResult {
 export interface InsightReportItem extends InsightResult {
 	id: string;
 	created_at?: string;
+}
+
+export interface ClosedLoopStage {
+	name: string;
+	status: string;
+	detail: string;
+	jobs?: number;
+}
+
+export interface ClosedLoopResult {
+	stages: ClosedLoopStage[];
+	summary: string;
+	status: string;
 }
 
 export interface AskResponse {

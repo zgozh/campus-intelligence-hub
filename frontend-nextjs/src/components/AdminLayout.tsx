@@ -7,6 +7,7 @@ import {
   BellOutlined,
   BulbOutlined,
   CheckCircleOutlined,
+  DeploymentUnitOutlined,
   DashboardOutlined,
   DatabaseOutlined,
   FileTextOutlined,
@@ -36,6 +37,7 @@ const MENU_ITEMS = [
   { key: "/review", icon: <CheckCircleOutlined />, i18nKey: "navigation.review" },
   { key: "/ask", icon: <MessageOutlined />, i18nKey: "navigation.ask" },
   { key: "/insights", icon: <BulbOutlined />, i18nKey: "navigation.insights" },
+  { key: "/closed-loop", icon: <DeploymentUnitOutlined />, i18nKey: "navigation.closedLoop" },
   { key: "/digests", icon: <FileTextOutlined />, i18nKey: "navigation.digests" },
 ];
 

@@ -83,7 +83,8 @@
     "changes": "Change Radar",
     "review": "Review Queue",
     "ask": "Ask AI",
-    "insights": "Campus Insights"
+    "insights": "Campus Insights",
+    "closedLoop": "Smart Loop"
   },
   "errors": {
     "required": "This field is required",

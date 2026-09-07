@@ -49,6 +49,7 @@ from services.collection_service import run_collection
 from services.discover_service import discover_sources
 from services.conflict_service import conflict_detail, detect_conflicts, resolve_conflict as resolve_conflict_svc
 from services.digest_service import generate_digest
+from services.agent_orchestrator import run_closed_loop
 from services.freshness_service import refresh_freshness
 from services.governance_service import archive_expired, archive_ko, batch_archive, create_ko, edit_ko, publish_ko
 from services.radar_service import knowledge_health, radar_stats
@@ -633,6 +634,19 @@ async def get_digest(
     if not digest:
         raise HTTPException(status_code=404, detail="日报不存在")
     return digest
+
+
+# ========== 三层 Agent 智能运营闭环 (G) ==========
+
+
+@router.post("/closed-loop/run")
+async def run_closed_loop_endpoint(
+    collect: bool = False,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """一键智能运营闭环：采集 Agent → 知识治理 Agent → 问答/运营 Agent。"""
+    return await run_closed_loop(db, collect=collect)
 
 
 # ========== 校务洞察 (F, LLM) ==========
