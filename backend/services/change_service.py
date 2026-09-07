@@ -8,6 +8,7 @@ from difflib import SequenceMatcher
 
 from sqlalchemy import func, select
 
+from agents.change_annotator import annotate_change
 from models import ChangeEvent, RawDocument, Source
 
 logger = logging.getLogger(__name__)
@@ -90,6 +91,12 @@ async def detect_and_record_change(db, source: Source, old_doc: RawDocument, new
     diff_ctx = (new_doc.content or "")[:600] + (old_doc.content or "")[:600]
     ctypes, severity = _classify(old_doc, new_doc, diff_ctx)
     summary = _diff_summary(old_doc, new_doc, ctypes, diff_ctx)
+
+    # LLM 语义增强（失败降级规则摘要）
+    annotation = await annotate_change(old_doc.content or "", new_doc.content or "")
+    if annotation:
+        severity = annotation.get("severity") or severity
+        summary = annotation.get("summary") or summary
 
     ce = ChangeEvent(
         source_id=source.id,
