@@ -788,3 +788,28 @@ class Digest(Base):
     title = Column(String(200), nullable=False)
     content = Column(Text, nullable=False)  # Markdown
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class ChangeEvent(Base):
+    """变更事件（spec §33）：自动采集发现的页面变化，支撑 Change Radar / Diff Viewer。
+
+    由采集对比前后两个版本触发：标题/正文/日期变化 + 严重度 + diff 摘要。
+    """
+
+    __tablename__ = "change_events"
+
+    id = Column(
+        String(50), primary_key=True, default=lambda: f"ce_{uuid.uuid4().hex[:12]}"
+    )
+    source_id = Column(String(50), ForeignKey("sources.id"), nullable=False, index=True)
+    normalized_url = Column(String(1000), nullable=False, index=True)
+    old_raw_document_id = Column(String(50), nullable=True)
+    new_raw_document_id = Column(String(50), nullable=True)
+    old_version = Column(Integer, nullable=True)
+    new_version = Column(Integer, nullable=True)
+    change_type = Column(JSON, nullable=True)  # ["TITLE_CHANGED","CONTENT_CHANGED","DATE_CHANGED"]
+    severity = Column(String(20), nullable=False, default="LOW")  # HIGH/MEDIUM/LOW
+    diff_summary = Column(Text, nullable=True)  # 人类可读的变更摘要
+    content_hash = Column(String(64), nullable=True)  # 新版本内容 hash
+    requires_review = Column(Boolean, nullable=False, default=True)
+    detected_at = Column(DateTime(timezone=True), server_default=func.now())

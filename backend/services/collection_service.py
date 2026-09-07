@@ -13,6 +13,7 @@ from database import AsyncSessionLocal
 from knowledge.fingerprint import canonical_title
 from models import CollectionJob, KnowledgeObject, RawDocument, Source, normalize_url
 from parser.extract import extract_article
+from services.change_service import detect_and_record_change
 from services.knowledge_service import build_knowledge_object
 
 logger = logging.getLogger(__name__)
@@ -121,6 +122,7 @@ async def run_collection(job_id: str) -> None:
                     for old_ko in old_kos.scalars():
                         old_ko.status = "EXPIRED"
                     await build_knowledge_object(db, doc)
+                    await detect_and_record_change(db, source, existing, doc)
                 else:
                     doc = RawDocument(
                         source_id=source.id,

@@ -34,6 +34,7 @@ from models import (
     ReviewTask,
     Source,
 )
+from services.change_service import get_change_detail, list_changes
 from services.collection_service import run_collection
 from services.conflict_service import detect_conflicts
 from services.digest_service import generate_digest
@@ -336,3 +337,31 @@ async def get_digest(
     if not digest:
         raise HTTPException(status_code=404, detail="日报不存在")
     return digest
+
+
+# ========== Change Radar (EPIC 5) ==========
+
+
+@router.get("/changes")
+async def get_changes(
+    severity: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Change Radar 列表：部门/级别/时间/类型。"""
+    return await list_changes(db, limit=limit, offset=offset, severity=severity)
+
+
+@router.get("/changes/{change_id}/diff")
+async def get_change_diff(
+    change_id: str,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Diff Viewer：Before/After 全文 + 行级高亮。"""
+    detail = await get_change_detail(db, change_id)
+    if not detail:
+        raise HTTPException(status_code=404, detail="变更不存在")
+    return detail

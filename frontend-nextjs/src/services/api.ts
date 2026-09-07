@@ -1127,6 +1127,20 @@ class APIService {
 	async listKnowledgeObjects(): Promise<{ objects: KnowledgeObject[]; total: number }> {
 		return this.request(`/api/v1/knowledge-objects`);
 	}
+
+	// Change Radar APIs (EPIC 5)
+	async listChanges(severity?: string, limit = 20, offset = 0): Promise<{ changes: ChangeEvent[]; total: number }> {
+		const params = new URLSearchParams();
+		if (severity) params.set("severity", severity);
+		params.set("limit", String(limit));
+		params.set("offset", String(offset));
+		const q = params.toString() ? `?${params.toString()}` : "";
+		return this.request(`/api/v1/changes${q}`);
+	}
+
+	async getChangeDiff(id: string): Promise<ChangeDetail> {
+		return this.request(`/api/v1/changes/${id}/diff`);
+	}
 }
 
 export interface CampusSource {
@@ -1218,6 +1232,29 @@ export interface KnowledgeObject {
 	content?: string | null;
 	source_url?: string | null;
 	created_at?: string | null;
+}
+
+export interface ChangeEvent {
+	id: string;
+	source_id: string;
+	source_name?: string;
+	normalized_url?: string;
+	old_version?: number | null;
+	new_version?: number | null;
+	change_type: string[];
+	severity: string;
+	diff_summary?: string | null;
+	requires_review?: boolean;
+	detected_at?: string | null;
+}
+
+export interface ChangeDetail extends ChangeEvent {
+	title_before?: string;
+	title_after?: string;
+	content_hash?: string | null;
+	before?: string;
+	after?: string;
+	changes: { type: string; lines: string[] }[];
 }
 
 export const api = new APIService();
