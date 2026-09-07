@@ -52,6 +52,8 @@ from services.freshness_service import refresh_freshness
 from services.governance_service import archive_expired, archive_ko, batch_archive, create_ko, edit_ko, publish_ko
 from services.radar_service import knowledge_health, radar_stats
 from services.review_service import approve_task, build_review_queue, reject_task
+from agents.review_advisor import audit_conflict, audit_knowledge_object
+from agents.insight_generator import generate_insight
 
 logger = logging.getLogger(__name__)
 
@@ -402,6 +404,35 @@ async def reject_review_task(
     return await reject_task(db, task_id, current_user.id)
 
 
+@router.post("/review-tasks/{task_id}/ai-suggest")
+async def ai_suggest_review_task(
+    task_id: str,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """AI 审核助手：LLM 审核摘要 + 风险 + 推荐动作（approve/reject/merge）。"""
+    task = await db.get(ReviewTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="审核任务不存在")
+    ko = await db.get(KnowledgeObject, task.knowledge_object_id)
+    return await audit_knowledge_object(ko, reason=task.reason)
+
+
+@router.post("/conflicts/{conflict_id}/ai-suggest")
+async def ai_suggest_conflict(
+    conflict_id: str,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """AI 冲突消解建议：保留哪份 / 合并 / 改用官方，供管理员决策。"""
+    cf = await db.get(Conflict, conflict_id)
+    if not cf:
+        raise HTTPException(status_code=404, detail="冲突不存在")
+    ko_a = await db.get(KnowledgeObject, cf.object_a)
+    ko_b = await db.get(KnowledgeObject, cf.object_b)
+    return await audit_conflict(cf, ko_a, ko_b)
+
+
 # ========== Knowledge Governance (EPIC 8) ==========
 
 
@@ -601,6 +632,18 @@ async def get_digest(
     if not digest:
         raise HTTPException(status_code=404, detail="日报不存在")
     return digest
+
+
+# ========== 校务洞察 (F, LLM) ==========
+
+
+@router.post("/insights")
+async def generate_insights_endpoint(
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """AI 校务洞察：基于运营数据（新增/变更/冲突/审核/来源/临期）由 LLM 生成洞察叙事。"""
+    return await generate_insight(db)
 
 
 # ========== Change Radar (EPIC 5) ==========
