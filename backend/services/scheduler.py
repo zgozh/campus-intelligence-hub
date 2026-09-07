@@ -451,3 +451,51 @@ class AgentPurgeScheduler:
 
 
 agent_purge_scheduler = AgentPurgeScheduler()
+
+
+class CampusInsightScheduler:
+    """校务洞察/日报自动定时推送（F）：每天凌晨生成日报 + AI 洞察并落盘。"""
+
+    def __init__(self):
+        self.scheduler = AsyncIOScheduler()
+        self.running = False
+
+    def start(self):
+        if self.running:
+            return
+        self.scheduler.start()
+        self.running = True
+        self.scheduler.add_job(
+            self.generate_daily_reports,
+            trigger="cron",
+            hour=1,
+            minute=0,
+            id="campus_daily_reports",
+            name="Generate campus daily digest & insight",
+            replace_existing=True,
+        )
+        logger.info("Campus insight scheduler started (daily at 01:00)")
+
+    def stop(self):
+        if self.running:
+            self.scheduler.shutdown()
+            self.running = False
+
+    async def generate_daily_reports(self):
+        from agents.insight_generator import generate_insight
+        from services.digest_service import generate_digest
+
+        try:
+            async with AsyncSessionLocal() as db:
+                digest = await generate_digest(db, "daily")
+                insight = await generate_insight(db, persist=True)
+                logger.info(
+                    "Campus daily digest=%s insight=%s generated",
+                    digest.get("id"),
+                    insight.get("id"),
+                )
+        except Exception as e:
+            logger.exception("Error in campus daily report generation: %s", e)
+
+
+campus_insight_scheduler = CampusInsightScheduler()

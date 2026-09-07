@@ -33,6 +33,7 @@ from models import (
     CollectionJob,
     Conflict,
     Digest,
+    InsightReport,
     KnowledgeObject,
     RawDocument,
     ReviewTask,
@@ -642,8 +643,22 @@ async def generate_insights_endpoint(
     current_user: AdminUser = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """AI 校务洞察：基于运营数据（新增/变更/冲突/审核/来源/临期）由 LLM 生成洞察叙事。"""
-    return await generate_insight(db)
+    """AI 校务洞察：基于运营数据（新增/变更/冲突/审核/来源/临期）由 LLM 生成并落盘。"""
+    return await generate_insight(db, persist=True)
+
+
+@router.get("/insights")
+async def list_insights_endpoint(
+    limit: int = 20,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """历史校务洞察报告列表（自动/手动生成）。"""
+    result = await db.execute(
+        select(InsightReport).order_by(InsightReport.created_at.desc()).limit(limit)
+    )
+    reports = result.scalars().all()
+    return {"reports": list(reports), "total": len(reports)}
 
 
 # ========== Change Radar (EPIC 5) ==========

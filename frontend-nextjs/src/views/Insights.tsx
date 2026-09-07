@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
 	Button,
 	Card,
@@ -10,17 +10,26 @@ import {
 	Tag,
 	Typography,
 	Spin,
+	Collapse,
 	message,
 } from "antd";
 import { BulbOutlined, ReloadOutlined } from "@ant-design/icons";
 import { api } from "../services/api";
-import type { InsightResult } from "../services/api";
+import type { InsightReportItem, InsightResult } from "../services/api";
 
 const { Title, Paragraph } = Typography;
 
 export default function InsightsPage() {
 	const [result, setResult] = useState<InsightResult | null>(null);
 	const [loading, setLoading] = useState(false);
+	const [history, setHistory] = useState<InsightReportItem[]>([]);
+
+	useEffect(() => {
+		api
+			.listInsights()
+			.then((d) => setHistory(d.reports || []))
+			.catch(() => {});
+	}, []);
 
 	const generate = async () => {
 		setLoading(true);
@@ -98,6 +107,20 @@ export default function InsightsPage() {
 			{!result && !loading && (
 				<Card>
 					<div style={{ color: "#999" }}>点击「生成今日洞察」，AI 将结合新增、变更、冲突、审核积压、来源异常与临期事项，输出本期要点、趋势、风险与建议。</div>
+				</Card>
+			)}
+
+			{history.length > 0 && (
+				<Card title="历史洞察报告" style={{ marginTop: 16 }}>
+					<Collapse
+						items={history.map((h) => ({
+							key: h.id || String(Math.random()),
+							label: `${h.created_at || ""} · ${h.content.split("\n")[0]?.slice(0, 40) || "洞察"}`,
+							children: (
+								<div style={{ whiteSpace: "pre-wrap", lineHeight: 1.8 }}>{h.content}</div>
+							),
+						}))}
+					/>
 				</Card>
 			)}
 		</div>

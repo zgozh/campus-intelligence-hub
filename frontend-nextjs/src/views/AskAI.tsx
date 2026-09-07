@@ -11,6 +11,9 @@ interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   citations?: AskResponse['citations'];
+  intent?: string;
+  department?: string | null;
+  graph_hints?: string[];
 }
 
 const STORAGE_KEY = 'campus_chat_history';
@@ -55,7 +58,15 @@ export default function AskAI() {
       const r = await api.askQuestion(q);
       setMessages((prev) => [
         ...prev,
-        { id: `${Date.now()}-a`, role: 'assistant', content: r.answer, citations: r.citations },
+        {
+          id: `${Date.now()}-a`,
+          role: 'assistant',
+          content: r.answer,
+          citations: r.citations,
+          intent: r.intent,
+          department: r.department,
+          graph_hints: r.graph_hints,
+        },
       ]);
     } catch (e) {
       setMessages((prev) => [
@@ -117,6 +128,20 @@ export default function AskAI() {
                   >
                     {m.content}
                   </div>
+                  {(m.intent || m.department) && (
+                    <div style={{ marginTop: 6 }}>
+                      {m.intent && <Tag color="geekblue">意图：{m.intent}</Tag>}
+                      {m.department && <Tag color="purple">部门：{m.department}</Tag>}
+                    </div>
+                  )}
+                  {m.graph_hints && m.graph_hints.length > 0 && (
+                    <div style={{ marginTop: 6 }}>
+                      <Tag color="cyan">图谱线索</Tag>
+                      {m.graph_hints.map((h, i) => (
+                        <span key={i} style={{ fontSize: 12, color: '#666', marginRight: 8 }}>{h}</span>
+                      ))}
+                    </div>
+                  )}
                   {m.citations && m.citations.length > 0 && (
                     <Collapse
                       size="small"

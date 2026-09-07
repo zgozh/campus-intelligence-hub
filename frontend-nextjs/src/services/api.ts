@@ -1167,6 +1167,10 @@ class APIService {
 		return this.request(`/api/v1/insights`, { method: "POST" });
 	}
 
+	async listInsights(limit = 20): Promise<{ reports: InsightReportItem[]; total: number }> {
+		return this.request(`/api/v1/insights?limit=${limit}`);
+	}
+
 	// Knowledge Object APIs
 	async listKnowledgeObjects(): Promise<{ objects: KnowledgeObject[]; total: number }> {
 		return this.request(`/api/v1/knowledge-objects`);
@@ -1342,6 +1346,11 @@ export interface InsightResult {
 		近期高严重度变更: string[];
 		临期事项: string[];
 	};
+}
+
+export interface InsightReportItem extends InsightResult {
+	id: string;
+	created_at?: string;
 }
 
 export interface AskResponse {

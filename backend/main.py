@@ -20,6 +20,7 @@ from services.scheduler import (
     url_fetch_scheduler,
     history_cleanup_scheduler,
     session_auto_close_scheduler,
+    campus_insight_scheduler,
 )
 from services.redis_service import get_redis, close_redis
 from middleware import RateLimitMiddleware, apply_cors_headers, get_request_client_ip
@@ -70,6 +71,10 @@ async def lifespan(app: FastAPI):
         await agent_purge_scheduler.purge_expired_agents()
         agent_purge_scheduler.start()
         logger.info("智能体清理调度器已启动")
+
+        logger.info("启动校务洞察/日报调度器...")
+        campus_insight_scheduler.start()
+        logger.info("校务洞察/日报调度器已启动")
     else:
         logger.info("测试模式已启用，跳过 Redis 和调度器启动")
 
@@ -91,6 +96,10 @@ async def lifespan(app: FastAPI):
         logger.info("停止智能体清理调度器...")
         agent_purge_scheduler.stop()
         logger.info("智能体清理调度器已停止")
+
+        logger.info("停止校务洞察/日报调度器...")
+        campus_insight_scheduler.stop()
+        logger.info("校务洞察/日报调度器已停止")
 
         # 关闭 Redis 连接
         logger.info("关闭 Redis 连接...")

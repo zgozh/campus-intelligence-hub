@@ -847,3 +847,16 @@ class KGRelation(Base):
     relation = Column(String(50), nullable=False)  # 发布/废止/修订/适用/隶属/关联/截止
     ko_id = Column(String(50), nullable=True)  # 来源知识对象
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class InsightReport(Base):
+    """AI 校务洞察报告（F）：由运营数据 + LLM 生成的洞察叙事，定时/手动均可落地存储。"""
+
+    __tablename__ = "insight_reports"
+
+    id = Column(
+        String(50), primary_key=True, default=lambda: f"ins_{uuid.uuid4().hex[:12]}"
+    )
+    content = Column(Text, nullable=False)  # Markdown 洞察叙事
+    data = Column(JSON, nullable=True)  # 生成时的运营数据快照
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, select
 
 from agents.llm import ask_llm
-from models import ChangeEvent, Conflict, KnowledgeObject, ReviewTask, Source
+from models import ChangeEvent, Conflict, InsightReport, KnowledgeObject, ReviewTask, Source
 
 logger = logging.getLogger(__name__)
 
@@ -101,8 +101,8 @@ def _rule_fallback(data: dict) -> str:
     return "\n".join(lines)
 
 
-async def generate_insight(db) -> dict:
-    """生成校务洞察文本（含数据快照），返回 {content, data}。"""
+async def generate_insight(db, persist: bool = False) -> dict:
+    """生成校务洞察文本（含数据快照）；persist=True 时落盘到 InsightReport。"""
     data = await _gather(db)
     try:
         raw = await ask_llm(
@@ -115,4 +115,13 @@ async def generate_insight(db) -> dict:
     except Exception as e:
         logger.warning("洞察生成 LLM 调用异常（降级规则式）: %s", e)
         content = _rule_fallback(data)
-    return {"content": content, "data": data}
+
+    result = {"content": content, "data": data}
+    if persist:
+        report = InsightReport(content=content, data=data)
+        db.add(report)
+        await db.commit()
+        await db.refresh(report)
+        result["id"] = report.id
+        result["created_at"] = report.created_at
+    return result
