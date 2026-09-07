@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, Col, Row, Statistic, Tag, Typography, Progress, Table, Space } from 'antd';
-import { WarningOutlined, SafetyOutlined } from '@ant-design/icons';
+import { Card, Col, Row, Statistic, Tag, Typography, Progress, Table, Space, Button } from 'antd';
+import { WarningOutlined, SafetyOutlined, BulbOutlined, BranchesOutlined, DeploymentUnitOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
-import type { ChangeEvent, KnowledgeHealth, KnowledgeObject } from '../services/api';
+import type { ChangeEvent, InsightReportItem, KnowledgeGraph, KnowledgeHealth, KnowledgeObject } from '../services/api';
 
 const { Title, Paragraph } = Typography;
 
@@ -26,11 +26,15 @@ export default function Overview() {
   const [health, setHealth] = useState<KnowledgeHealth | null>(null);
   const [changes, setChanges] = useState<ChangeEvent[]>([]);
   const [objects, setObjects] = useState<KnowledgeObject[]>([]);
+  const [insight, setInsight] = useState<InsightReportItem | null>(null);
+  const [graph, setGraph] = useState<KnowledgeGraph | null>(null);
 
   useEffect(() => {
     api.getKnowledgeHealth().then(setHealth).catch(console.error);
     api.listChanges().then((d) => setChanges((d.changes || []).slice(0, 5))).catch(console.error);
     api.listKnowledgeObjects().then((d) => setObjects(d.objects || [])).catch(console.error);
+    api.listInsights(1).then((d) => setInsight((d.reports || [])[0] || null)).catch(console.error);
+    api.listKnowledgeGraph().then(setGraph).catch(console.error);
   }, []);
 
   // 部门知识分布
@@ -109,6 +113,33 @@ export default function Overview() {
                 ))}
               </Space>
             )}
+          </Card>
+        </Col>
+      </Row>
+
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Col xs={24} md={16}>
+          <Card
+            title={<span><BulbOutlined style={{ color: '#722ed1', marginRight: 8 }} />AI 校务洞察</span>}
+            extra={<ButtonLink onClick={() => navigate('/insights')} />}
+          >
+            {insight ? (
+              <Paragraph ellipsis={{ rows: 3 }} style={{ whiteSpace: 'pre-wrap' }}>{insight.content}</Paragraph>
+            ) : (
+              <Typography.Text type="secondary">暂无洞察报告，前往「校务洞察」点击生成。</Typography.Text>
+            )}
+          </Card>
+        </Col>
+        <Col xs={24} md={8}>
+          <Card
+            title={<span><BranchesOutlined style={{ color: '#1677ff', marginRight: 8 }} />知识图谱</span>}
+            extra={<ButtonLink onClick={() => navigate('/knowledge-graph')} />}
+          >
+            <Statistic title="实体" value={graph?.entity_count ?? 0} />
+            <Statistic title="关系" value={graph?.relation_count ?? 0} style={{ marginTop: 8 }} />
+            <Button type="primary" block icon={<DeploymentUnitOutlined />} style={{ marginTop: 12 }} onClick={() => navigate('/closed-loop')}>
+              一键智能闭环
+            </Button>
           </Card>
         </Col>
       </Row>

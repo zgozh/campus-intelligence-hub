@@ -37,7 +37,7 @@
 | 采集 | **变化检测召回** | 人工抽验页面实际变化的发现率 |
 | 知识治理 | **知识健康度** | 上述公开公式 |
 | 治理效率 | **AI 预审采纳率** | 人工最终动作与 AI 建议一致的比例 |
-| 复用 | **开放接口数** | REST + MCP 工具数（campus_search/source/knowledge/changes/review） |
+| 复用 | **开放接口数** | REST + MCP 工具数（campus_search/source/knowledge/changes/review/insight/closed_loop，共 7 个） |
 
 > 部署即得：一键 `docker compose up -d --build`，无本地模型/GPU（全部走 DashScope 云 API），可空 API key 演示（Mock 降级链路，Zero-API Demo）。
 

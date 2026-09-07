@@ -11,6 +11,8 @@ from sqlalchemy import select
 from database import get_db
 from models import ChangeEvent, KnowledgeObject, ReviewTask, Source
 from services.search_service import search_knowledge
+from agents.insight_generator import generate_insight
+from services.agent_orchestrator import run_closed_loop
 
 router = APIRouter(prefix="/api")
 
@@ -50,6 +52,19 @@ TOOLS = [
         "name": "campus_review",
         "description": "获取待审核校务知识。",
         "inputSchema": {"type": "object", "properties": {"status": {"type": "string", "default": "pending"}}},
+    },
+    {
+        "name": "campus_insight",
+        "description": "生成 AI 校务洞察（本期要点/趋势/风险/建议，基于运营数据）。",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "campus_closed_loop",
+        "description": "一键运行三层智能运营闭环（采集→知识治理→问答/运营）。可选 collect=true 开启实时采集。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"collect": {"type": "boolean", "default": False}},
+        },
     },
 ]
 
@@ -141,6 +156,14 @@ async def _call_tool(name: str, args: dict, db):
             ],
             "total": len(tasks),
         }
+
+    if name == "campus_insight":
+        result = await generate_insight(db)
+        return {"content": result["content"], "data": result.get("data", {})}
+
+    if name == "campus_closed_loop":
+        result = await run_closed_loop(db, collect=bool(args.get("collect", False)))
+        return {"status": result["status"], "summary": result["summary"], "stages": result["stages"]}
 
     return {"error": f"unknown tool: {name}"}
 
