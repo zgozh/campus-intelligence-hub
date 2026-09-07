@@ -77,6 +77,18 @@ export default function Overview() {
         校务知识全局视图：健康度 · 重大变更 · 风险 · 部门分布
       </Paragraph>
 
+      <Card size="small" style={{ marginBottom: 16 }}>
+        <Space wrap size={8}>
+          <Text type="secondary">快捷操作：</Text>
+          <Button size="small" onClick={() => navigate('/sources')}>数据源</Button>
+          <Button size="small" onClick={() => navigate('/knowledge-objects')}>知识对象</Button>
+          <Button size="small" onClick={() => navigate('/jobs')}>采集任务</Button>
+          <Button size="small" onClick={() => navigate('/review')}>审核队列</Button>
+          <Button size="small" onClick={() => navigate('/ask')}>AI 问答</Button>
+          <Button size="small" type="primary" onClick={() => navigate('/closed-loop')}>智能闭环</Button>
+        </Space>
+      </Card>
+
       <Row gutter={[16, 16]}>
         <Col xs={24} md={8}>
           <Card>

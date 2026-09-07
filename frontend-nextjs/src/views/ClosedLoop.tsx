@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
 	Alert,
 	Button,
@@ -51,6 +51,27 @@ export default function ClosedLoop() {
 	const [result, setResult] = useState<ClosedLoopResult | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [collect, setCollect] = useState(false);
+	const [stats, setStats] = useState({ sources: 0, pending: 0, entities: 0, relations: 0, reports: 0, health: 0 });
+
+	useEffect(() => {
+		api.listSources().then((d) => setStats((s) => ({ ...s, sources: d.total }))).catch(() => {});
+		api.listReviewTasks().then((d) => setStats((s) => ({ ...s, pending: d.total }))).catch(() => {});
+		api.listKnowledgeGraph().then((d) => setStats((s) => ({ ...s, entities: d.entity_count, relations: d.relation_count }))).catch(() => {});
+		api.listInsights(1).then((d) => setStats((s) => ({ ...s, reports: d.total }))).catch(() => {});
+		api.getKnowledgeHealth().then((h) => setStats((s) => ({ ...s, health: h.health_score }))).catch(() => {});
+	}, []);
+
+	const statusOf = (name: string): string => {
+		switch (name) {
+			case "采集 Agent": return `数据源 ${stats.sources}`;
+			case "知识治理 Agent": return `待审 ${stats.pending}`;
+			case "图谱 Agent": return `${stats.entities} 实体 · ${stats.relations} 关系`;
+			case "洞察 Agent": return `${stats.reports} 份报告`;
+			case "问答 Agent": return `健康度 ${stats.health}`;
+			case "审核助手 Agent": return `待审 ${stats.pending}`;
+			default: return "";
+		}
+	};
 
 	const run = async () => {
 		setLoading(true);
@@ -77,6 +98,7 @@ export default function ClosedLoop() {
 							<div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
 								<span style={{ color: a.color, fontSize: 18 }}>{a.icon}</span>
 								<Text strong>{a.name}</Text>
+								<Tag color="blue" style={{ marginLeft: "auto" }}>{statusOf(a.name)}</Tag>
 							</div>
 							<div style={{ color: "#666", fontSize: 13, minHeight: 36 }}>{a.desc}</div>
 							<Button size="small" type="link" style={{ padding: 0 }} onClick={() => navigate(a.path)}>
