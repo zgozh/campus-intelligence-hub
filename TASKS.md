@@ -1,88 +1,72 @@
-# TASKS — 开发任务拆分（EPIC 0–12）
+# TASKS — Campus Intelligence Hub 2.0 升级任务拆解
 
-> 原则：每个 EPIC 能跑、能演示、再 commit、再进入下一步；禁止本地模型/GPU；模型走 Provider Adapter。
+> 依据《（完善版）最终冲奖Spec v4.0》EPIC 1-12。基于现有 1.0 原型（commit 37a659f）升级，非重写。
+> 完成标准：每 EPIC 均以 `docker compose up -d --build` 真实验证，不凭口头/单测。复用成熟 OSS 组件，前端同步复用。
 
----
+## EPIC 1 — 稳定现有原型
+- [x] docker compose 一键启动，6 容器 healthy（已实测）
+- [x] 前端 24 页面编译通过；登录/注册/用户管理可用
+- [ ] 回归验证：/sources /jobs /knowledge-objects /radar /review /ask /digests 全 200
 
-## EPIC 0 — 现状审计 + OSS 侦察 ✅（进行中）
+## EPIC 2 — Source Registry 增强
+- [ ] Source 增加：`department`、`category`、`allowed_domains`(JSON)、`robots_policy`、`ratelimit_qps`、`max_depth`、`timeout_s`、`content_type_filter`
+- [ ] `POST /sources/discover` 自动发现（URL → 候选栏目/部门，受 allowed_domains 限定）
+- [ ] 前端数据源表单加 部门/分类/允许域名/抓取策略 + 「自动发现」
 
-产出：`CURRENT_SYSTEM_AUDIT.md` / `OSS_REUSE.md` / `ARCHITECTURE.md` / `docs/adr/ADR-001` `ADR-002` / `TASKS.md`
-验收：五份文档齐全且基于真实代码，Basjoo 已克隆并深读。
+## EPIC 3 — Crawler / Ingestion 扩展
+- [ ] 采集支持 URL/HTML（已有）、PDF、DOCX、CSV（pdfplumber/python-docx 兜底）
+- [ ] 采集安全参数（max_depth/max_pages/timeout/content-type/size）从 Source 策略读取
+- [ ] 真实 gzhu/gznews 采集仍 100% 可用
 
-## EPIC 1 — Basjoo 原版启动
+## EPIC 4 — SourceVersion + ChangeEvent（P0 地基）
+- [ ] 新增 `SourceVersion(src_svid, source_id, version_no, content_hash, fetched_at, published_at, content, metadata)`
+- [ ] 新增 `ChangeEvent(ce_id, source_id, source_version, old_version, change_type, severity, diff, diff_summary, requires_review)`
+- [ ] 变更检测：内容 hash 变化 → TITLE/CONTENT/DATE/ATTACHMENT changed + severity(HIGH/MEDIUM/LOW)
+- [ ] 采集入库自动写 SourceVersion + 产生 ChangeEvent
 
-- 将 Basjoo 代码拷入 `campus-intelligence-hub`（backend/frontend-nextjs/scrapling-service/docker-compose 等）
-- 收敛 docker-compose 为 `docker compose up -d --build`（含 mock 默认可跑）
-- 验收：`docker compose up -d` 后 `http://localhost:3000` 打开，登录/建 Agent/URL 抓取/知识库/问答跑通
+## EPIC 5 — Change Radar + Diff Viewer（P0 最强视觉）
+- [ ] 后端 `GET /changes`（部门/级别/时间/类型列表）+ `GET /changes/{id}/diff`（Before/After）
+- [ ] 后端 `GET /knowledge-health`（综合评分 + 公式公开）
+- [ ] 前端 `/changes` 页面：WHAT CHANGED? 列表 + 严重度徽章 + 点击进 Diff
+- [ ] 前端 Diff Viewer 组件：Before/After 对照 + 高亮（复用 antd + 自定义 diff 渲染）
+- [ ] 前端 Dashboard 第一屏 → TODAY 统计（New/Changed/Conflicts/Pending）+ Knowledge Health
 
-## EPIC 2 — Campus Shell（品牌与语义改造）
+## EPIC 6 — Knowledge Object 增强
+- [ ] KO 增加 `authority`（来源权威度，配置化）、`freshness_level`、`last_verified_at`、`source_version`
+- [ ] 变更语义：KO 关联 ChangeEvent，版本语义化
 
-- 改 Brand/Sidebar/术语：Basjoo→校务智汇中台；Agent→校务助手（保留单默认 Agent，砍多租户）
-- 删除 widget / 配额 / 计费
-- 验收：界面文案校务化，多租户入口收敛
+## EPIC 7 — Conflict Engine 增强
+- [ ] 冲突队列展示 diff 证据（Source A/B + 字段 + 值）
+- [ ] resolve 支持 Use A / Use B / Merge / Ignore（补 Merge 与证据）
 
-## EPIC 3 — Source 域
+## EPIC 8 — Governance
+- [ ] approve/reject/edit/publish/archive 全链路（补 edit/publish/archive）
+- [ ] 状态机 DISCOVERED→PARSED→PENDING_REVIEW→APPROVED→PUBLISHED→STALE→ARCHIVED
 
-- 实现 `Source` + `CollectionJob` 数据模型与 API（增删改查、Run Now/Pause/日志、Job 状态机）
-- 复用 Basjoo `IndexJob`/`URLSource` 改造
-- 验收：Sources 页 + Jobs 页可操作，Job 状态流转正确
+## EPIC 9 — AI Assistant 升级
+- [ ] 融合评分 score = semantic + lexical + authority + freshness + recency
+- [ ] Answer Guard 显式化（证据不足 → 拒答模板，不编造）
+- [ ] answer 返回元数据：Source / Effective Date / Freshness / Confidence / Related
+- [ ] 引用可展开（已有）+ 显示 freshness/confidence
 
-## EPIC 4 — 自动采集器
+## EPIC 10 — Digest / Health / 部门 / 驾驶舱
+- [ ] Daily Digest（新增/变化/重要通知/冲突/待审 + Top5 变化）增强
+- [ ] Knowledge Health 仪表（Coverage/Freshness/Citation Rate/Conflict Rate/Review Backlog/Source Health）
+- [ ] `/department` 部门视角（我的来源/变更/知识/审核/日报）
+- [ ] `/overview` 校领导驾驶舱（Health/Critical Changes/Risk/Departments）
 
-- 迁移 gzhu/gznews 站点适配器 + 采集引擎到 `collectors/`
-- 接入 scrapling-service；支持 website/url/list_page/manual/file
-- 验收：添加官网/URL/列表页 → Run Now → 真实抓取入库
+## EPIC 11 — MCP + 对外 API
+- [ ] MCP server：campus/search|source|knowledge|changes|review
+- [ ] 对外公开 API：GET /api/knowledge/search、/api/knowledge/:id、/api/changes、/api/conflicts、/api/digest、POST /api/chat
 
-## EPIC 5 — 文档管道
-
-- Fetch → Parse → Normalize → Fingerprint(content_hash) → Diff(版本检测) → Index
-- 迁移 parser/extract、dedup、splitter/writer
-- 验收：重复内容不入库；标题同正文异→新版本；单元测试覆盖 fingerprint/version
-
-## EPIC 6 — Knowledge Object
-
-- 实现 Classifier(5类型)/Extractor(时间/地点/部门/截止/材料)/Curator(KO+tags+relations+summary) 三 Agent
-- 迁移 rules.py 规则打标 + 六大专题域 + validity.py 有效期
-- 验收：文档→结构化 KO（type/department/effective_from/to/facts/confidence/version）
-
-## EPIC 7 — Freshness / Conflict
-
-- 版本新旧切换（OLD→EXPIRED，NEW→ACTIVE）；问答优先 ACTIVE，历史版本按需
-- Conflict 检测（同字段多来源值不一致）
-- 验收：过期知识降权/切换正确；冲突被标记
-
-## EPIC 8 — Search + Ask AI
-
-- Hybrid Retrieve(dense+sparse→归一化→时间衰减→过期降权→断崖截断) + 外部 rerank + citation + freshness/conflict-aware answer
-- 迁移 hybrid.py + prompts + 流式 SSE
-- 验收：Ask AI 给结论+当前版本+依据+更新时间+来源部门，引用率 100%；冲突时标注不一致
-
-## EPIC 9 — Review Queue
-
-- 低置信(<0.75)或冲突 → 审核队列；左原文/中AI抽取/右证据；Approve/Reject/Edit
-- 验收：审核通过后知识生效、问答更新
-
-## EPIC 10 — Knowledge Radar
-
-- 今日新增/更新/待审/将过期/来源异常/冲突 + 部门活跃度图表
-- 验收：Radar 页数据正确、可视化
-
-## EPIC 11 — Digest
-
-- 定时日报/周报（新增通知/变化政策/将截止/更新部门/异常），Markdown/PDF/网页
-- 验收：生成可读 Digest 并展示
-
-## EPIC 12 — 演示 / 评测 / 最终集成
-
-- Golden Demo 18 步真实验证（clone→env→docker→source→crawl→knowledge→review→ask→digest）
-- Mock 模式 + RESET_DEMO/SEED_DEMO + docker-compose.demo.yml
-- 单元/集成/E2E(5 黄金路径) + 20 题演示清单复测
-- 验收：3–5 分钟演示路径跑通，一条 docker 命令起全栈
+## EPIC 12 — Final Integration
+- [ ] 端到端 Golden Path：Add Source → Auto Crawl → Extract → New Knowledge → Change → Diff → Review → Publish → Ask AI → Correct Citation
+- [ ] Zero-API Demo（无 key 全 Mock 可展示）
+- [ ] 统一视觉（Enterprise/Clean/Info-dense/Evidence-first）+ 组件-API 绑定全检
+- [ ] 稳定版：固定 5 Sources / 20 Documents / 3 Changes / 1 Conflict
 
 ---
 
-## P0（必须）/ P1（建议）/ P2（可选）
-
-- P0：Docker 一键、无本地模型、云 API、Mock、官网/URL 采集、文件导入、AI 分类/抽取、去重、版本、引用问答、过期处理、冲突检测、Review、Radar
-- P1：日报/周报、混合检索、Model Usage、SSE 采集日志、Playwright E2E、Demo Reset
-- P2：微信公众号、邮件采集、MCP、知识图谱可视化、多学校配置
+### 进度记录
+- 2026-09 EPIC 0：产出 `EXISTING_SYSTEM_AUDIT.md`（审计当前 1.0 原型）。OSS_REUSE.md / ARCHITECTURE.md 沿用 1.0 底座稿（仍有效）。
+- 下一步优先：**EPIC 4 + EPIC 5**（ChangeEvent/SourceVersion + Change Radar/Diff 为比赛最强且当前 MISSING）。
