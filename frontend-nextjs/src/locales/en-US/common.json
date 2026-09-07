@@ -61,6 +61,7 @@
   },
   "navigation": {
     "dashboard": "Console",
+    "overview": "Executive Overview",
     "playground": "Playground",
     "knowledge": "Knowledge Base",
     "websites": "Websites",

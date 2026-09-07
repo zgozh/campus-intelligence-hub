@@ -8,6 +8,7 @@ import {
   DashboardOutlined,
   DatabaseOutlined,
   FileTextOutlined,
+  FundOutlined,
   LogoutOutlined,
   MessageOutlined,
   RadarChartOutlined,
@@ -22,6 +23,7 @@ import { useAuth } from "../context/AuthContext";
 const { Sider, Header, Content } = Layout;
 
 const MENU_ITEMS = [
+  { key: "/overview", icon: <FundOutlined />, i18nKey: "navigation.overview" },
   { key: "/", icon: <DashboardOutlined />, i18nKey: "navigation.dashboard" },
   { key: "/sources", icon: <DatabaseOutlined />, i18nKey: "navigation.sources" },
   { key: "/jobs", icon: <UnorderedListOutlined />, i18nKey: "navigation.jobs" },
