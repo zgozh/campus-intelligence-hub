@@ -7,6 +7,7 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,6 +40,7 @@ from services.collection_service import run_collection
 from services.conflict_service import detect_conflicts
 from services.digest_service import generate_digest
 from services.freshness_service import refresh_freshness
+from services.governance_service import archive_ko, edit_ko, publish_ko
 from services.radar_service import knowledge_health, radar_stats
 from services.review_service import approve_task, build_review_queue, reject_task
 
@@ -290,6 +292,67 @@ async def reject_review_task(
     db: AsyncSession = Depends(get_db),
 ):
     return await reject_task(db, task_id, current_user.id)
+
+
+# ========== Knowledge Governance (EPIC 8) ==========
+
+
+class EditKoRequest(BaseModel):
+    title: str | None = None
+    type: str | None = None
+    department: str | None = None
+    effective_from: str | None = None
+    effective_to: str | None = None
+    summary: str | None = None
+    facts: list | None = None
+    tags: list | None = None
+    confidence: float | None = None
+
+
+@router.post("/knowledge-objects/{ko_id}/publish")
+async def publish_knowledge_object(
+    ko_id: str,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    ko = await publish_ko(db, ko_id)
+    if not ko:
+        raise HTTPException(status_code=404, detail="知识对象不存在或不可发布")
+    return {"id": ko.id, "status": ko.status}
+
+
+@router.post("/knowledge-objects/{ko_id}/archive")
+async def archive_knowledge_object(
+    ko_id: str,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    ko = await archive_ko(db, ko_id)
+    if not ko:
+        raise HTTPException(status_code=404, detail="知识对象不存在")
+    return {"id": ko.id, "status": ko.status}
+
+
+@router.post("/knowledge-objects/{ko_id}/edit")
+async def edit_knowledge_object(
+    ko_id: str,
+    req: EditKoRequest,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    data = req.model_dump(exclude_unset=True)
+    ko = await edit_ko(db, ko_id, data)
+    if not ko:
+        raise HTTPException(status_code=404, detail="知识对象不存在")
+    return {
+        "id": ko.id,
+        "status": ko.status,
+        "title": ko.title,
+        "department": ko.department,
+        "effective_from": ko.effective_from,
+        "effective_to": ko.effective_to,
+        "summary": ko.summary,
+    }
 
 
 # ========== Knowledge Radar (EPIC 10) ==========

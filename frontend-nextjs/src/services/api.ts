@@ -1132,6 +1132,26 @@ class APIService {
 		return this.request(`/api/v1/knowledge-objects`);
 	}
 
+	// Knowledge Governance APIs (EPIC 8)
+	async publishKo(id: string): Promise<{ id: string; status: string }> {
+		return this.request(`/api/v1/knowledge-objects/${id}/publish`, { method: "POST" });
+	}
+
+	async archiveKo(id: string): Promise<{ id: string; status: string }> {
+		return this.request(`/api/v1/knowledge-objects/${id}/archive`, { method: "POST" });
+	}
+
+	async editKo(id: string, data: {
+		title?: string; type?: string; department?: string;
+		effective_from?: string; effective_to?: string; summary?: string;
+		facts?: { field: string; value: string }[]; tags?: string[]; confidence?: number;
+	}): Promise<{ id: string; status: string }> {
+		return this.request(`/api/v1/knowledge-objects/${id}/edit`, {
+			method: "POST",
+			body: JSON.stringify(data),
+		});
+	}
+
 	// Change Radar APIs (EPIC 5)
 	async listChanges(severity?: string, limit = 20, offset = 0): Promise<{ changes: ChangeEvent[]; total: number }> {
 		const params = new URLSearchParams();
