@@ -37,7 +37,7 @@ from models import (
 )
 from services.change_service import get_change_detail, list_changes
 from services.collection_service import run_collection
-from services.conflict_service import detect_conflicts
+from services.conflict_service import conflict_detail, detect_conflicts, resolve_conflict as resolve_conflict_svc
 from services.digest_service import generate_digest
 from services.freshness_service import refresh_freshness
 from services.governance_service import archive_ko, edit_ko, publish_ko
@@ -225,20 +225,35 @@ async def list_conflicts(
     return ConflictListResponse(conflicts=list(conflicts), total=total)
 
 
+class ResolveConflictRequest(BaseModel):
+    decision: str = "use_a"  # use_a / use_b / merge / ignore
+    winner_id: str | None = None
+
+
 @router.post("/conflicts/{conflict_id}/resolve")
 async def resolve_conflict(
+    conflict_id: str,
+    req: ResolveConflictRequest,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await resolve_conflict_svc(db, conflict_id, req.decision, req.winner_id, current_user.id)
+    if result.get("error"):
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
+
+@router.get("/conflicts/{conflict_id}/diff")
+async def get_conflict_diff(
     conflict_id: str,
     current_user: AdminUser = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    cf = await db.get(Conflict, conflict_id)
-    if not cf:
+    """冲突 diff 证据：object A/B 的标题/部门/事实/有效期对照。"""
+    detail = await conflict_detail(db, conflict_id)
+    if not detail:
         raise HTTPException(status_code=404, detail="冲突不存在")
-    cf.status = "resolved"
-    cf.resolved_by = str(current_user.id)
-    cf.resolved_at = datetime.now(timezone.utc)
-    await db.commit()
-    return {"resolved": True}
+    return detail
 
 
 # ========== Review Queue (EPIC 9) ==========
