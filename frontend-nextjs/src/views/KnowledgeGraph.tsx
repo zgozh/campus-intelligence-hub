@@ -29,11 +29,11 @@ export default function KnowledgeGraphPage() {
   const build = async () => {
     setBuilding(true);
     try {
-      const r = await api.buildKnowledgeGraph();
+      const r = await api.buildKnowledgeGraph(20);
       message.success(`图谱构建完成：新增 ${r.relations_added} 条关系`);
       await load();
     } catch (e) {
-      message.error('图谱构建失败（需模型 API key）');
+      message.error(`图谱构建失败：${(e as Error)?.message || '请配置模型 API Key 后重试'}`);
     } finally {
       setBuilding(false);
     }

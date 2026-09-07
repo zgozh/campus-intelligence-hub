@@ -35,7 +35,11 @@ async def build_graph(db, limit: int = 50) -> dict:
     for ko in kos:
         facts_str = json.dumps(ko.facts, ensure_ascii=False) if ko.facts else ""
         content = (ko.summary or "") + "\n" + facts_str
-        triples = await extract_triples(content)
+        try:
+            triples = await extract_triples(content)
+        except Exception:  # noqa: BLE001 单条抽取失败降级跳过，不中断整个构建
+            skipped += 1
+            continue
         for t in triples:
             head = await _get_or_create_entity(db, t["head"], t["head_type"], ko.id)
             tail = await _get_or_create_entity(db, t["tail"], t["tail_type"], ko.id)
