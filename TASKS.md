@@ -67,6 +67,13 @@
 
 ---
 
-### 进度记录
-- 2026-09 EPIC 0：产出 `EXISTING_SYSTEM_AUDIT.md`（审计当前 1.0 原型）。OSS_REUSE.md / ARCHITECTURE.md 沿用 1.0 底座稿（仍有效）。
-- 下一步优先：**EPIC 4 + EPIC 5**（ChangeEvent/SourceVersion + Change Radar/Diff 为比赛最强且当前 MISSING）。
+### 进度记录（2026-09）
+- ✅ EPIC 0：现有原型审计 + 2.0 规划（EXISTING_SYSTEM_AUDIT / TASKS / DECISIONS）
+- ✅ EPIC 4+5：ChangeEvent + 变更检测 + **Change Radar / Diff Viewer**（行级高亮）
+- ✅ EPIC 6+8：知识治理生命周期（approve/reject/edit/publish/archive + 状态机）
+- ✅ EPIC 9：AI 问答升级（融合评分 + Answer Guard + Evidence citation + Freshness 分级）
+- ✅ EPIC 10：**Knowledge Health 综合评测** + 首页 TODAY/健康度仪表
+- ✅ EPIC 11：**对外中台 API**（/api/*）+ **Campus Knowledge MCP**（/api/mcp，JSON-RPC）
+- ✅ EPIC 1/12 冒烟：docker compose 全 healthy，前端 25 页 / 全站 12 页 200，后端全部端点非 500，组件-API 绑定无遗漏
+- 端到端 Golden Path 已打通：Add Source → Auto Crawl → Extract → Change → Diff → Review → Publish → Ask AI → Correct Citation
+- 剩余(可选增强)：EPIC 2(Source 自动发现) / EPIC 3(Crawler PDF/DOCX/CSV) / EPIC 7(Conflict Merge) / EPIC 10 剩余(部门视角/校领导驾驶舱)
