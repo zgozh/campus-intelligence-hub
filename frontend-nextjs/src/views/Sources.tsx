@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Button, Form, Input, Modal, Popconfirm, Radio, Select, Space, Table, Tag, Typography, Upload, message } from 'antd';
 import { CompassOutlined, PlusOutlined } from '@ant-design/icons';
 import { api } from '../services/api';
-import type { CampusSource, DiscoverResult } from '../services/api';
+import type { CampusSource, RecommendResult } from '../services/api';
 
 const { Title } = Typography;
 
@@ -30,6 +30,9 @@ const COLUMN_OPTIONS = [
   { value: '规章制度', label: '规章制度' },
 ];
 
+const valueColor: Record<string, string> = { high: 'red', medium: 'orange', low: 'default' };
+const valueZh: Record<string, string> = { high: '高价值', medium: '一般', low: '低价值' };
+
 export default function Sources() {
   const [sources, setSources] = useState<CampusSource[]>([]);
   const [loading, setLoading] = useState(false);
@@ -47,7 +50,7 @@ export default function Sources() {
   const [discoverOpen, setDiscoverOpen] = useState(false);
   const [discoverUrl, setDiscoverUrl] = useState('');
   const [discoverLoading, setDiscoverLoading] = useState(false);
-  const [discovered, setDiscovered] = useState<DiscoverResult['discovered']>([]);
+  const [discovered, setDiscovered] = useState<RecommendResult['recommended']>([]);
   const [discoveredOrigin, setDiscoveredOrigin] = useState('');
   const [uploadingId, setUploadingId] = useState<string | null>(null);
 
@@ -118,9 +121,9 @@ export default function Sources() {
     }
     setDiscoverLoading(true);
     try {
-      const r = await api.discoverSources(discoverUrl.trim());
-      setDiscovered(r.discovered || []);
-      setDiscoveredOrigin(r.origin || '');
+      const r = await api.recommendSources(discoverUrl.trim());
+      setDiscovered(r.recommended || []);
+      setDiscoveredOrigin(discoverUrl.trim());
     } catch (e) {
       message.error('自动发现失败，请检查 URL 或网络');
       setDiscovered([]);
@@ -193,10 +196,13 @@ export default function Sources() {
 
   const discoverColumns = [
     { title: '栏目/部门', dataIndex: 'name', ellipsis: true },
+    { title: '推荐', dataIndex: 'value', width: 90, render: (v: string) => <Tag color={valueColor[v] || 'default'}>{valueZh[v] || v}</Tag> },
+    { title: '分类', dataIndex: 'category', width: 100, render: (v: string) => <Tag color="geekblue">{v}</Tag> },
+    { title: '频率', dataIndex: 'frequency_hours', width: 90, render: (v: number) => `${v}h` },
     { title: 'URL', dataIndex: 'url', ellipsis: true, render: (v: string) => <span style={{ fontSize: 12 }}>{v}</span> },
     {
       title: '操作',
-      width: 100,
+      width: 90,
       render: (_: unknown, r: { name: string; url: string }) => (
         <Button size="small" type="link" onClick={() => addDiscovered(r)}>添加</Button>
       ),
@@ -240,11 +246,11 @@ export default function Sources() {
 
       {/* 自动发现 */}
       <Modal
-        title="自动发现数据源"
+        title="AI 智能推荐数据源"
         open={discoverOpen}
         onCancel={() => setDiscoverOpen(false)}
         footer={null}
-        width={760}
+        width={860}
         destroyOnClose
       >
         <Space.Compact style={{ width: '100%', marginBottom: 16 }}>
@@ -254,12 +260,12 @@ export default function Sources() {
             onChange={(e) => setDiscoverUrl(e.target.value)}
             onPressEnter={runDiscover}
           />
-          <Button type="primary" onClick={runDiscover} loading={discoverLoading}>开始发现</Button>
+          <Button type="primary" onClick={runDiscover} loading={discoverLoading}>智能推荐</Button>
         </Space.Compact>
 
         {discovered.length > 0 && (
           <div>
-            <Typography.Text type="secondary">从 {discoveredOrigin} 发现 {discovered.length} 个候选栏目/部门（同域限定）：</Typography.Text>
+            <Typography.Text type="secondary">从 {discoveredOrigin} 智能推荐 {discovered.length} 个候选校务源（LLM 筛高价值 + 分类 + 建议采集频率）：</Typography.Text>
             <Table rowKey="url" columns={discoverColumns} dataSource={discovered} pagination={false} size="small" style={{ marginTop: 12 }} />
           </div>
         )}

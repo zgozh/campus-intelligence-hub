@@ -39,6 +39,7 @@ from models import (
     Source,
     compute_content_hash,
 )
+from agents.source_ranker import rank_candidates
 from services.change_service import get_change_detail, list_changes
 from services.document_parser import DocumentParser
 from services.knowledge_service import build_knowledge_object
@@ -105,6 +106,20 @@ async def discover_source(
         return await discover_sources(req.url, req.max_links)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"自动发现失败: {e}")
+
+
+@router.post("/sources/recommend")
+async def recommend_sources(
+    req: DiscoverRequest,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """智能推荐（C）：自动发现 + LLM 筛高价值校务源/分类/建议采集频率。"""
+    try:
+        disc = await discover_sources(req.url, req.max_links)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"自动发现失败: {e}")
+    return await rank_candidates(disc["discovered"])
 
 
 @router.post("/sources/{source_id}/ingest-file")

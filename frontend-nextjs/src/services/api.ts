@@ -1041,6 +1041,13 @@ class APIService {
 		});
 	}
 
+	async recommendSources(url: string, maxLinks = 20): Promise<RecommendResult> {
+		return this.request(`/api/v1/sources/recommend`, {
+			method: "POST",
+			body: JSON.stringify({ url, max_links: maxLinks }),
+		});
+	}
+
 	async ingestFile(sourceId: string, file: File): Promise<{ raw_document_id: string; knowledge_object_id: string; status: string; content_len: number }> {
 		const form = new FormData();
 		form.append("file", file);
@@ -1334,6 +1341,11 @@ export interface DiscoverResult {
 	base_url: string;
 	origin: string;
 	discovered: { name: string; url: string; type: string; domain: string }[];
+	total: number;
+}
+
+export interface RecommendResult {
+	recommended: { name: string; url: string; type: string; domain: string; value: string; category: string; frequency_hours: number }[];
 	total: number;
 }
 
