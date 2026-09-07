@@ -8,7 +8,7 @@ import { api } from '../services/api';
 import type { ChangeEvent, InsightReportItem, KnowledgeGraph, KnowledgeHealth, KnowledgeObject } from '../services/api';
 import DashboardMarkdown from '../components/DashboardMarkdown';
 
-const { Title, Paragraph } = Typography;
+const { Title, Paragraph, Text } = Typography;
 
 function healthColor(s: number) {
   return s >= 80 ? '#52c41a' : s >= 60 ? '#faad14' : '#ff4d4f';
