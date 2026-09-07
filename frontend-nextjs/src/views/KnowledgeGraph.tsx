@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Button, Card, Col, Drawer, Input, Row, Select, Space, Steps, Table, Tag, Typography, message } from 'antd';
+import { Button, Card, Checkbox, Col, Drawer, Input, Row, Select, Space, Steps, Table, Tag, Typography, message } from 'antd';
 import { BranchesOutlined, SendOutlined } from '@ant-design/icons';
 import { api } from '../services/api';
 import type { KGAskResult, KnowledgeGraph } from '../services/api';
@@ -28,6 +28,7 @@ export default function KnowledgeGraphPage() {
   const [buildError, setBuildError] = useState<string | null>(null);
   const [selEntity, setSelEntity] = useState<Entity | null>(null);
   const [filterTypes, setFilterTypes] = useState<string[]>([]);
+  const [forceBuild, setForceBuild] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -43,7 +44,7 @@ export default function KnowledgeGraphPage() {
     const t0 = Date.now();
     const timer = setInterval(() => setBuildStage((s) => Math.min(2, s + 1)), 700);
     try {
-      const r = await api.buildKnowledgeGraph(20);
+      const r = await api.buildKnowledgeGraph(20, forceBuild);
       setBuildInfo({ ...r, elapsed: ((Date.now() - t0) / 1000).toFixed(1) });
       setBuildStage(3);
       message.success(`图谱构建完成：新增 ${r.relations_added} 条关系`);
@@ -98,8 +99,9 @@ export default function KnowledgeGraphPage() {
 
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col xs={24} md={16}>
-          <Space>
+          <Space wrap>
             <Button type="primary" icon={<BranchesOutlined />} loading={building} onClick={build}>构建/更新图谱</Button>
+            <Checkbox checked={forceBuild} onChange={(e) => setForceBuild(e.target.checked)}>强制重建（含已构建的数据，反映内容改动）</Checkbox>
             <span style={{ color: '#888' }}>实体 {graph?.entity_count ?? 0} · 关系 {graph?.relation_count ?? 0}</span>
           </Space>
         </Col>

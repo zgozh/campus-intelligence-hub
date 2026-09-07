@@ -619,11 +619,12 @@ async def ingest_knowledge_object_file(
 @router.post("/knowledge-graph/build")
 async def build_knowledge_graph(
     limit: int = 50,
+    force: bool = False,
     current_user: AdminUser = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """LLM 从已发布知识对象抽取三元组构建校务知识图谱。"""
-    return await build_graph(db, limit=limit)
+    """LLM 从已发布知识对象抽取三元组构建校务知识图谱（增量；force=True 全量重抽）。"""
+    return await build_graph(db, limit=limit, force=force)
 
 
 @router.get("/knowledge-graph")

@@ -23,46 +23,138 @@ GRAPH_PROMPT = """你是校务知识图谱问答助手。基于下方【图谱�
 {query}"""
 
 
-async def build_graph(db, limit: int = 50) -> dict:
-    """从发布版 KO 抽取三元组构建图谱（按 head+relation+tail 去重）。"""
+async def build_graph(db, limit: int = 50, force: bool = False) -> dict:
+    """从发布版 KO 抽取三元组构建图谱，增量 + 并发 + 生命周期一致。
+
+    修复与增强：
+    - 并发抽取（asyncio 信号量限流），避免串行 20 次 LLM 超时/卡住；
+    - 增量：默认仅处理尚未在图谱中贡献关系的 KO；force=True 时对全部 KO 重抽（反映内容改动）；
+    - 防御：单条三元组畸形逐个跳过，不中断整体；
+    - 一致性：归档/过期 KO 的关系与孤立节点自动清理。
+    """
     kos = (
         await db.execute(
             select(KnowledgeObject).where(KnowledgeObject.status == "PUBLISHED").limit(limit)
         )
     ).scalars().all()
-    relations_added = skipped = 0
     ko_count = len(kos)
-    for ko in kos:
-        facts_str = json.dumps(ko.facts, ensure_ascii=False) if ko.facts else ""
-        content = (ko.summary or "") + "\n" + facts_str
-        try:
-            triples = await extract_triples(content)
-        except Exception:  # noqa: BLE001 单条抽取失败降级跳过，不中断整个构建
+    relations_added = skipped = 0
+
+    # 已在图谱中贡献过关系的 KO（增量跳过）；force 时全量重抽
+    done_ids = (
+        set()
+        if force
+        else set(
+            (await db.execute(select(KGRelation.ko_id).where(KGRelation.ko_id.isnot(None)))).scalars().all()
+        )
+    )
+
+    # 并发抽取（纯 LLM，无 DB 占用；失败返回 None 降级）
+    import asyncio
+
+    sem = asyncio.Semaphore(4)
+
+    async def _extract(content: str):
+        async with sem:
+            try:
+                return await extract_triples(content)
+            except Exception:  # noqa: BLE001
+                return None
+
+    to_build = [ko for ko in kos if ko.id not in done_ids]
+    results = await asyncio.gather(*[_extract((ko.summary or "") + "\n" + (json.dumps(ko.facts, ensure_ascii=False) if ko.facts else "")) for ko in to_build])
+
+    for ko, triples in zip(to_build, results):
+        if triples is None:
             skipped += 1
             continue
+        if not isinstance(triples, list):
+            continue
         for t in triples:
-            head = await _get_or_create_entity(db, t["head"], t["head_type"], ko.id)
-            tail = await _get_or_create_entity(db, t["tail"], t["tail_type"], ko.id)
-            if not head or not tail:
+            if not isinstance(t, dict):
                 skipped += 1
                 continue
-            exists = await db.scalar(
-                select(KGRelation.id).where(
-                    KGRelation.head_id == head.id,
-                    KGRelation.tail_id == tail.id,
-                    KGRelation.relation == t["relation"],
-                )
-            )
-            if not exists:
-                db.add(
-                    KGRelation(
-                        head_id=head.id, tail_id=tail.id, relation=t["relation"], ko_id=ko.id
+            try:
+                head_name = str(t.get("head") or "").strip()
+                tail_name = str(t.get("tail") or "").strip()
+                relation = str(t.get("relation") or "").strip()
+                head_type = str(t.get("head_type") or "对象")[:20]
+                tail_type = str(t.get("tail_type") or "对象")[:20]
+                if not head_name or not tail_name or not relation:
+                    skipped += 1
+                    continue
+                head = await _get_or_create_entity(db, head_name, head_type, ko.id)
+                tail = await _get_or_create_entity(db, tail_name, tail_type, ko.id)
+                if not head or not tail:
+                    skipped += 1
+                    continue
+                exists = await db.scalar(
+                    select(KGRelation.id).where(
+                        KGRelation.head_id == head.id,
+                        KGRelation.tail_id == tail.id,
+                        KGRelation.relation == relation,
                     )
                 )
-                relations_added += 1
+                if not exists:
+                    db.add(
+                        KGRelation(
+                            head_id=head.id, tail_id=tail.id, relation=relation, ko_id=ko.id
+                        )
+                    )
+                    relations_added += 1
+            except Exception:  # noqa: BLE001 单条三元组处理失败跳过
+                skipped += 1
+                continue
+
+    # 一致性清理：删除来源 KO 已不再 PUBLISHED 的关系，以及由此产生的孤立实体
+    await _maintain_consistency(db)
+
     await db.commit()
-    logger.info("图谱构建：ko=%d relations_added=%d skipped=%d", ko_count, relations_added, skipped)
+    logger.info(
+        "图谱构建：ko=%d(新处理%d) relations_added=%d skipped=%d",
+        ko_count,
+        len(to_build),
+        relations_added,
+        skipped,
+    )
     return {"ko_count": ko_count, "relations_added": relations_added, "skipped": skipped}
+
+
+async def _maintain_consistency(db):
+    """图谱与数据源生命周期一致性：删除已归档/过期/非发布 KO 贡献的关系，再清孤立实体。"""
+    # 当前所有 PUBLISHED KO id
+    pub_ids = list(
+        (await db.execute(select(KnowledgeObject.id).where(KnowledgeObject.status == "PUBLISHED"))).scalars().all()
+    )
+    # 删除来源 KO 已不在发布集的关系
+    if pub_ids:
+        orphan_rels = (
+            await db.execute(
+                select(KGRelation).where(
+                    KGRelation.ko_id.isnot(None),
+                    KGRelation.ko_id.notin_(pub_ids),
+                )
+            )
+        ).scalars().all()
+    else:
+        orphan_rels = (
+            await db.execute(select(KGRelation).where(KGRelation.ko_id.isnot(None)))
+        ).scalars().all()
+    for r in orphan_rels:
+        await db.delete(r)
+
+    # 删除已无任何关系、且其来源 KO 不在发布集的孤立实体
+    all_entities = (await db.execute(select(KGEntity))).scalars().all()
+    for e in all_entities:
+        linked = await db.scalar(
+            select(KGRelation.id).where(
+                (KGRelation.head_id == e.id) | (KGRelation.tail_id == e.id)
+            )
+        )
+        if linked:
+            continue
+        if e.ko_id is None or e.ko_id not in pub_ids:
+            await db.delete(e)
 
 
 async def _get_or_create_entity(db, name: str, etype: str, ko_id: str | None):

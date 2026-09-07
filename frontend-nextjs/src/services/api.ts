@@ -1236,8 +1236,8 @@ class APIService {
 	}
 
 	// Knowledge Graph APIs (A, LLM 抽取)
-	async buildKnowledgeGraph(limit = 50): Promise<{ ko_count: number; relations_added: number; skipped: number }> {
-		return this.request(`/api/v1/knowledge-graph/build?limit=${limit}`, { method: "POST" });
+	async buildKnowledgeGraph(limit = 50, force = false): Promise<{ ko_count: number; relations_added: number; skipped: number }> {
+		return this.request(`/api/v1/knowledge-graph/build?limit=${limit}&force=${force}`, { method: "POST" });
 	}
 
 	async listKnowledgeGraph(limit = 300): Promise<KnowledgeGraph> {
