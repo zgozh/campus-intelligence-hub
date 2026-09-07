@@ -818,3 +818,32 @@ class ChangeEvent(Base):
     content_hash = Column(String(64), nullable=True)  # 新版本内容 hash
     requires_review = Column(Boolean, nullable=False, default=True)
     detected_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class KGEntity(Base):
+    """知识图谱实体（spec 增强 A：校务知识图谱，参考 DocPolicyKG/UniAI-GraphRAG）。"""
+
+    __tablename__ = "kg_entities"
+
+    id = Column(
+        String(50), primary_key=True, default=lambda: f"e_{uuid.uuid4().hex[:12]}"
+    )
+    name = Column(String(200), nullable=False, index=True)
+    entity_type = Column(String(50), nullable=False, default="对象")  # 部门/政策/事件/对象/时间/文件
+    ko_id = Column(String(50), nullable=True)  # 来源知识对象
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class KGRelation(Base):
+    """知识图谱关系（head -relation-> tail 三元组）。"""
+
+    __tablename__ = "kg_relations"
+
+    id = Column(
+        String(50), primary_key=True, default=lambda: f"r_{uuid.uuid4().hex[:12]}"
+    )
+    head_id = Column(String(50), ForeignKey("kg_entities.id"), nullable=False, index=True)
+    tail_id = Column(String(50), ForeignKey("kg_entities.id"), nullable=False, index=True)
+    relation = Column(String(50), nullable=False)  # 发布/废止/修订/适用/隶属/关联/截止
+    ko_id = Column(String(50), nullable=True)  # 来源知识对象
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

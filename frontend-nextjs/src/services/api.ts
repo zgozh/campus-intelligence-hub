@@ -1193,6 +1193,19 @@ class APIService {
 		return this.request(`/api/v1/knowledge-objects/archive-expired`, { method: "POST" });
 	}
 
+	// Knowledge Graph APIs (A, LLM 抽取)
+	async buildKnowledgeGraph(limit = 50): Promise<{ ko_count: number; relations_added: number; skipped: number }> {
+		return this.request(`/api/v1/knowledge-graph/build?limit=${limit}`, { method: "POST" });
+	}
+
+	async listKnowledgeGraph(limit = 300): Promise<KnowledgeGraph> {
+		return this.request(`/api/v1/knowledge-graph?limit=${limit}`);
+	}
+
+	async askKnowledgeGraph(query: string): Promise<KGAskResult> {
+		return this.request(`/api/v1/knowledge-graph/ask?query=${encodeURIComponent(query)}&top_k=8`, { method: "POST" });
+	}
+
 	// Change Radar APIs (EPIC 5)
 	async listChanges(severity?: string, limit = 20, offset = 0): Promise<{ changes: ChangeEvent[]; total: number }> {
 		const params = new URLSearchParams();
@@ -1336,6 +1349,19 @@ export interface ChangeEvent {
 	diff_summary?: string | null;
 	requires_review?: boolean;
 	detected_at?: string | null;
+}
+
+export interface KnowledgeGraph {
+	entities: { id: string; name: string; type: string; ko_id?: string | null }[];
+	relations: { id: string; head_id: string; tail_id: string; relation: string }[];
+	entity_count: number;
+	relation_count: number;
+}
+
+export interface KGAskResult {
+	answer: string;
+	related: string[];
+	grounded: boolean;
 }
 
 export interface ChangeDetail extends ChangeEvent {

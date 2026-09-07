@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { Avatar, Button, Layout, Menu, theme } from "antd";
 import {
+  ApartmentOutlined,
   BellOutlined,
   CheckCircleOutlined,
   DashboardOutlined,
@@ -28,6 +29,7 @@ const MENU_ITEMS = [
   { key: "/sources", icon: <DatabaseOutlined />, i18nKey: "navigation.sources" },
   { key: "/jobs", icon: <UnorderedListOutlined />, i18nKey: "navigation.jobs" },
   { key: "/knowledge-objects", icon: <StarOutlined />, i18nKey: "navigation.knowledgeObjects" },
+  { key: "/knowledge-graph", icon: <ApartmentOutlined />, i18nKey: "navigation.knowledgeGraph" },
   { key: "/changes", icon: <BellOutlined />, i18nKey: "navigation.changes" },
   { key: "/radar", icon: <RadarChartOutlined />, i18nKey: "navigation.radar" },
   { key: "/review", icon: <CheckCircleOutlined />, i18nKey: "navigation.review" },

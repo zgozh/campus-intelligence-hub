@@ -79,6 +79,7 @@
     "radar": "Knowledge Radar",
     "digests": "Digests",
     "knowledgeObjects": "Knowledge Objects",
+    "knowledgeGraph": "Knowledge Graph",
     "changes": "Change Radar",
     "review": "Review Queue",
     "ask": "Ask AI"

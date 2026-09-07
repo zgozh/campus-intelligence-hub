@@ -8,7 +8,7 @@ import os
 import tempfile
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,6 +42,7 @@ from models import (
 from services.change_service import get_change_detail, list_changes
 from services.document_parser import DocumentParser
 from services.knowledge_service import build_knowledge_object
+from services.kg_service import build_graph, graph_ask, list_graph
 from services.collection_service import run_collection
 from services.discover_service import discover_sources
 from services.conflict_service import conflict_detail, detect_conflicts, resolve_conflict as resolve_conflict_svc
@@ -495,6 +496,39 @@ async def archive_expired_knowledge_objects(
     """一键归档：把所有已过期(EXPIRED)知识对象转为 ARCHIVED。"""
     n = await archive_expired(db)
     return {"archived": n}
+
+
+# ========== Knowledge Graph (A, LLM 抽取) ==========
+
+
+@router.post("/knowledge-graph/build")
+async def build_knowledge_graph(
+    limit: int = 50,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """LLM 从已发布知识对象抽取三元组构建校务知识图谱。"""
+    return await build_graph(db, limit=limit)
+
+
+@router.get("/knowledge-graph")
+async def get_knowledge_graph(
+    limit: int = 300,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """图谱实体/关系列表。"""
+    return await list_graph(db, limit=limit)
+
+
+@router.post("/knowledge-graph/ask")
+async def ask_knowledge_graph(
+    query: str = Query(..., min_length=1, max_length=500),
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """图谱问答（实体匹配 + 邻居遍历 + LLM 回答）。"""
+    return await graph_ask(db, query)
 
 
 # ========== Knowledge Radar (EPIC 10) ==========

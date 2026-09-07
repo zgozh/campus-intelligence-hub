@@ -79,6 +79,7 @@
     "radar": "知识雷达",
     "digests": "日报周报",
     "knowledgeObjects": "知识对象",
+    "knowledgeGraph": "知识图谱",
     "changes": "变更雷达",
     "review": "审核队列",
     "ask": "AI 问答"
