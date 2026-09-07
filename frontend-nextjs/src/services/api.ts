@@ -1041,6 +1041,18 @@ class APIService {
 		});
 	}
 
+	async ingestFile(sourceId: string, file: File): Promise<{ raw_document_id: string; knowledge_object_id: string; status: string; content_len: number }> {
+		const form = new FormData();
+		form.append("file", file);
+		const res = await fetch(`${this.baseUrl}/api/v1/sources/${sourceId}/ingest-file`, {
+			method: "POST",
+			headers: { Authorization: `Bearer ${localStorage.getItem("token") || ""}` },
+			body: form,
+		});
+		if (!res.ok) throw new Error("文件上传/解析失败");
+		return res.json();
+	}
+
 	async createSource(data: {
 		name: string;
 		source_type?: string;

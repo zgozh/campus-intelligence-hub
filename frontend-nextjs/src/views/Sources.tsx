@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Button, Form, Input, Modal, Popconfirm, Radio, Select, Space, Table, Tag, Typography, message } from 'antd';
+import { Button, Form, Input, Modal, Popconfirm, Radio, Select, Space, Table, Tag, Typography, Upload, message } from 'antd';
 import { CompassOutlined, PlusOutlined } from '@ant-design/icons';
 import { api } from '../services/api';
 import type { CampusSource, DiscoverResult } from '../services/api';
@@ -49,6 +49,7 @@ export default function Sources() {
   const [discoverLoading, setDiscoverLoading] = useState(false);
   const [discovered, setDiscovered] = useState<DiscoverResult['discovered']>([]);
   const [discoveredOrigin, setDiscoveredOrigin] = useState('');
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -138,6 +139,19 @@ export default function Sources() {
     }
   };
 
+  const onUploadFile = async (sourceId: string, file: File) => {
+    setUploadingId(sourceId);
+    try {
+      const r = await api.ingestFile(sourceId, file);
+      message.success(`已解析入库：${r.content_len} 字符`);
+      await load();
+    } catch (e) {
+      message.error('文件解析入库失败');
+    } finally {
+      setUploadingId(null);
+    }
+  };
+
   const columns = [
     { title: '名称', dataIndex: 'name' },
     { title: '类型', dataIndex: 'source_type', width: 110 },
@@ -155,10 +169,19 @@ export default function Sources() {
     },
     {
       title: '操作',
-      width: 200,
+      width: 260,
       render: (_: unknown, record: CampusSource) => (
         <Space>
           <Button size="small" type="primary" onClick={() => openRun(record)}>采集</Button>
+          <Upload
+            showUploadList={false}
+            beforeUpload={(f) => {
+              onUploadFile(record.id, f as File);
+              return false;
+            }}
+          >
+            <Button size="small" loading={uploadingId === record.id}>上传文件</Button>
+          </Upload>
           <Button size="small" onClick={() => onPause(record.id)}>暂停</Button>
           <Popconfirm title="确认删除该数据源？" onConfirm={() => onDelete(record.id)}>
             <Button size="small" danger>删除</Button>

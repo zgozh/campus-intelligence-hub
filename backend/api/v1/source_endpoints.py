@@ -4,9 +4,11 @@
 """
 
 import logging
+import os
+import tempfile
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,10 +34,14 @@ from models import (
     Conflict,
     Digest,
     KnowledgeObject,
+    RawDocument,
     ReviewTask,
     Source,
+    compute_content_hash,
 )
 from services.change_service import get_change_detail, list_changes
+from services.document_parser import DocumentParser
+from services.knowledge_service import build_knowledge_object
 from services.collection_service import run_collection
 from services.discover_service import discover_sources
 from services.conflict_service import conflict_detail, detect_conflicts, resolve_conflict as resolve_conflict_svc
@@ -98,6 +104,58 @@ async def discover_source(
         return await discover_sources(req.url, req.max_links)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"自动发现失败: {e}")
+
+
+@router.post("/sources/{source_id}/ingest-file")
+async def ingest_file(
+    source_id: str,
+    file: UploadFile = File(...),
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """文件源采集（EPIC 3）：上传 PDF/DOCX/XLSX/TXT 等 → DocumentParser 解析 → RawDocument + 知识对象。"""
+    source = await db.get(Source, source_id)
+    if not source:
+        raise HTTPException(status_code=404, detail="数据源不存在")
+    ext = os.path.splitext(file.filename or "")[1].lstrip(".").lower() or "txt"
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}")
+    try:
+        tmp.write(await file.read())
+        tmp.close()
+        try:
+            content = DocumentParser().parse(tmp.name, ext)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=400, detail=f"文件解析失败: {e}")
+    finally:
+        if os.path.exists(tmp.name):
+            os.unlink(tmp.name)
+
+    if not content:
+        raise HTTPException(status_code=400, detail="文件中无可提取文本")
+
+    norm_url = f"file://{source_id}/{file.filename}"
+    doc = RawDocument(
+        source_id=source.id,
+        url=norm_url,
+        normalized_url=norm_url,
+        title=file.filename or "上传文件",
+        canonical_title=file.filename or "上传文件",
+        content=content,
+        content_hash=compute_content_hash(content),
+        version=1,
+        source_site=source.name,
+        column=None,
+    )
+    db.add(doc)
+    await db.flush()
+    ko = await build_knowledge_object(db, doc, source)
+    await db.commit()
+    return {
+        "raw_document_id": doc.id,
+        "knowledge_object_id": ko.id,
+        "status": "processed",
+        "content_len": len(content),
+    }
 
 
 @router.get("/sources/{source_id}", response_model=SourceItem)
