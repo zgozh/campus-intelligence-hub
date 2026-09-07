@@ -1,0 +1,105 @@
+"use client";
+
+import { useState } from "react";
+import {
+	Button,
+	Card,
+	Col,
+	Row,
+	Statistic,
+	Tag,
+	Typography,
+	Spin,
+	message,
+} from "antd";
+import { BulbOutlined, ReloadOutlined } from "@ant-design/icons";
+import { api } from "../services/api";
+import type { InsightResult } from "../services/api";
+
+const { Title, Paragraph } = Typography;
+
+export default function InsightsPage() {
+	const [result, setResult] = useState<InsightResult | null>(null);
+	const [loading, setLoading] = useState(false);
+
+	const generate = async () => {
+		setLoading(true);
+		try {
+			setResult(await api.generateInsights());
+		} catch (e) {
+			message.error(`生成洞察失败：${(e as Error)?.message || "请配置模型 API Key"}`);
+		} finally {
+			setLoading(false);
+		}
+	};
+
+	const stats = result?.data?.统计;
+
+	return (
+		<div>
+			<Title level={4} style={{ marginTop: 0 }}>
+				AI 校务洞察 <span style={{ fontWeight: 400, fontSize: 14, color: "#888" }}>基于运营数据的智能解读</span>
+			</Title>
+
+			<Button
+				type="primary"
+				icon={<BulbOutlined />}
+				loading={loading}
+				onClick={generate}
+				style={{ marginBottom: 16 }}
+			>
+				{result ? "重新生成" : "生成今日洞察"}
+			</Button>
+
+			{loading && (
+				<Card style={{ marginBottom: 16 }}>
+					<Spin tip="正在生成洞察…" style={{ display: "block", padding: 32 }}>
+						<div style={{ height: 80 }} />
+					</Spin>
+				</Card>
+			)}
+
+			{result && (
+				<>
+					<Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+						<Col xs={12} md={4}>
+							<Card><Statistic title="今日新增" value={stats?.今日新增 ?? 0} /></Card>
+						</Col>
+						<Col xs={12} md={4}>
+							<Card><Statistic title="已发布知识" value={stats?.已发布知识 ?? 0} /></Card>
+						</Col>
+						<Col xs={12} md={4}>
+							<Card><Statistic title="开放冲突" value={stats?.开放冲突 ?? 0} /></Card>
+						</Col>
+						<Col xs={12} md={4}>
+							<Card><Statistic title="待审核" value={stats?.待审核 ?? 0} /></Card>
+						</Col>
+						<Col xs={12} md={4}>
+							<Card><Statistic title="异常来源" value={stats?.异常来源 ?? 0} /></Card>
+						</Col>
+					</Row>
+
+					<Card title="洞察内容" style={{ marginBottom: 16 }}>
+						<Paragraph style={{ whiteSpace: "pre-wrap", lineHeight: 1.8 }}>{result.content}</Paragraph>
+					</Card>
+
+					{stats?.部门分布 && Object.keys(stats.部门分布).length > 0 && (
+						<Card title="知识部门分布">
+							{Object.entries(stats.部门分布).map(([k, v]) => (
+								<Tag color="geekblue" key={k} style={{ marginBottom: 8 }}>
+									{k}：{v} 条
+								</Tag>
+							))}
+						</Card>
+					)}
+				</>
+			)}
+
+			{!result && !loading && (
+				<Card>
+					<div style={{ color: "#999" }}>点击「生成今日洞察」，AI 将结合新增、变更、冲突、审核积压、来源异常与临期事项，输出本期要点、趋势、风险与建议。</div>
+				</Card>
+			)}
+		</div>
+	);
+}

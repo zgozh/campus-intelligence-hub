@@ -5,6 +5,7 @@ import { Button, Card, Col, Input, Row, Space, Table, Tag, Typography, message }
 import { BranchesOutlined, SendOutlined } from '@ant-design/icons';
 import { api } from '../services/api';
 import type { KGAskResult, KnowledgeGraph } from '../services/api';
+import GraphForce from '../components/GraphForce';
 
 const { Title } = Typography;
 
@@ -88,6 +89,12 @@ export default function KnowledgeGraphPage() {
         {asked && (
           <div style={{ marginTop: 12 }}>
             <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>{asked.answer}</div>
+            {(asked.intent || asked.department) && (
+              <div style={{ marginTop: 8 }}>
+                {asked.intent && <Tag color="geekblue">意图：{asked.intent}</Tag>}
+                {asked.department && <Tag color="purple">部门：{asked.department}</Tag>}
+              </div>
+            )}
             {asked.related?.length > 0 && (
               <div style={{ marginTop: 8 }}>
                 <Tag color="blue">涉及实体</Tag>{asked.related.join('、')}
@@ -95,6 +102,10 @@ export default function KnowledgeGraphPage() {
             )}
           </div>
         )}
+      </Card>
+
+      <Card title="图谱可视化（力导向）" style={{ marginBottom: 16 }}>
+        <GraphForce entities={graph?.entities || []} relations={graph?.relations || []} />
       </Card>
 
       <Row gutter={[16, 16]}>

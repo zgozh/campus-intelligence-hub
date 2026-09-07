@@ -1153,6 +1153,20 @@ class APIService {
 		});
 	}
 
+	// AI 审核助手 APIs (E)
+	async aiSuggestReviewTask(id: string): Promise<AIReviewSuggest> {
+		return this.request(`/api/v1/review-tasks/${id}/ai-suggest`, { method: "POST" });
+	}
+
+	async aiSuggestConflict(id: string): Promise<ConflictSuggest> {
+		return this.request(`/api/v1/conflicts/${id}/ai-suggest`, { method: "POST" });
+	}
+
+	// 校务洞察 APIs (F)
+	async generateInsights(): Promise<InsightResult> {
+		return this.request(`/api/v1/insights`, { method: "POST" });
+	}
+
 	// Knowledge Object APIs
 	async listKnowledgeObjects(): Promise<{ objects: KnowledgeObject[]; total: number }> {
 		return this.request(`/api/v1/knowledge-objects`);
@@ -1298,6 +1312,38 @@ export interface ReviewTaskItem {
 	ko_type?: string | null;
 }
 
+export interface AIReviewSuggest {
+	summary?: string;
+	risks?: string[];
+	recommendation?: "approve" | "reject" | "merge";
+	reason?: string;
+	confidence?: number;
+	error?: string;
+}
+
+export interface ConflictSuggest {
+	keep?: "a" | "b";
+	recommendation?: string;
+	note?: string;
+	confidence?: number;
+}
+
+export interface InsightResult {
+	content: string;
+	data: {
+		统计: {
+			今日新增: number;
+			已发布知识: number;
+			开放冲突: number;
+			待审核: number;
+			异常来源: number;
+			部门分布: Record<string, number>;
+		};
+		近期高严重度变更: string[];
+		临期事项: string[];
+	};
+}
+
 export interface AskResponse {
 	answer: string;
 	citations: {
@@ -1317,6 +1363,9 @@ export interface AskResponse {
 	}[];
 	query: string;
 	grounded?: boolean;
+	intent?: string;
+	department?: string | null;
+	graph_hints?: string[];
 }
 
 export interface KnowledgeObject {

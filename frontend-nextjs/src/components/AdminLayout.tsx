@@ -5,6 +5,7 @@ import { Avatar, Button, Layout, Menu, theme } from "antd";
 import {
   ApartmentOutlined,
   BellOutlined,
+  BulbOutlined,
   CheckCircleOutlined,
   DashboardOutlined,
   DatabaseOutlined,
@@ -34,6 +35,7 @@ const MENU_ITEMS = [
   { key: "/radar", icon: <RadarChartOutlined />, i18nKey: "navigation.radar" },
   { key: "/review", icon: <CheckCircleOutlined />, i18nKey: "navigation.review" },
   { key: "/ask", icon: <MessageOutlined />, i18nKey: "navigation.ask" },
+  { key: "/insights", icon: <BulbOutlined />, i18nKey: "navigation.insights" },
   { key: "/digests", icon: <FileTextOutlined />, i18nKey: "navigation.digests" },
 ];
 

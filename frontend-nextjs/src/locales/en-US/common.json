@@ -82,7 +82,8 @@
     "knowledgeGraph": "Knowledge Graph",
     "changes": "Change Radar",
     "review": "Review Queue",
-    "ask": "Ask AI"
+    "ask": "Ask AI",
+    "insights": "Campus Insights"
   },
   "errors": {
     "required": "This field is required",

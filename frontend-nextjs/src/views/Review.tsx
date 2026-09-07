@@ -1,14 +1,18 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Button, Space, Table, Tag, Typography, message } from 'antd';
+import { Alert, Button, Modal, Space, Table, Tag, Typography, message } from 'antd';
+import { RobotOutlined } from '@ant-design/icons';
 import { api } from '../services/api';
-import type { ReviewTaskItem } from '../services/api';
+import type { AIReviewSuggest, ReviewTaskItem } from '../services/api';
 
-const { Title } = Typography;
+const { Title, Paragraph } = Typography;
 
 export default function Review() {
   const [tasks, setTasks] = useState<ReviewTaskItem[]>([]);
+  const [suggest, setSuggest] = useState<AIReviewSuggest | null>(null);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [activeTask, setActiveTask] = useState<ReviewTaskItem | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -34,6 +38,19 @@ export default function Review() {
     await load();
   };
 
+  const aiSuggest = async (row: ReviewTaskItem) => {
+    setActiveTask(row);
+    setSuggest(null);
+    setSuggestLoading(true);
+    try {
+      setSuggest(await api.aiSuggestReviewTask(row.id));
+    } catch (e) {
+      message.error(`AI 审核失败：${(e as Error)?.message || '请配置模型 API Key'}`);
+    } finally {
+      setSuggestLoading(false);
+    }
+  };
+
   const columns = [
     { title: '类型', dataIndex: 'ko_type', width: 120 },
     {
@@ -47,15 +64,14 @@ export default function Review() {
     { title: '标题', dataIndex: 'ko_title', ellipsis: true },
     {
       title: '操作',
-      width: 170,
+      width: 250,
       render: (_: unknown, r: ReviewTaskItem) => (
         <Space>
-          <Button size="small" type="primary" onClick={() => approve(r.id)}>
-            批准
+          <Button size="small" icon={<RobotOutlined />} loading={suggestLoading && activeTask?.id === r.id} onClick={() => aiSuggest(r)}>
+            AI 建议
           </Button>
-          <Button size="small" danger onClick={() => reject(r.id)}>
-            拒绝
-          </Button>
+          <Button size="small" type="primary" onClick={() => approve(r.id)}>批准</Button>
+          <Button size="small" danger onClick={() => reject(r.id)}>拒绝</Button>
         </Space>
       ),
     },
@@ -69,6 +85,58 @@ export default function Review() {
       ) : (
         <Table rowKey="id" columns={columns} dataSource={tasks} pagination={false} />
       )}
+
+      <Modal
+        open={!!activeTask}
+        title="AI 审核建议"
+        loading={suggestLoading}
+        onCancel={() => setActiveTask(null)}
+        footer={[
+          <Button key="close" onClick={() => setActiveTask(null)}>关闭</Button>,
+          ...(activeTask && suggest ? [
+            <Button
+              key="ok"
+              type="primary"
+              loading={suggestLoading}
+              onClick={async () => {
+                await approve(activeTask.id);
+                setActiveTask(null);
+              }}
+            >
+              按 AI 建议批准
+            </Button>,
+          ] : []),
+        ]}
+      >
+        {suggestLoading ? (
+          <p>正在调用模型生成审核意见…</p>
+        ) : suggest ? (
+          <div>
+            <Paragraph>
+              <b>要点：</b>{suggest.summary || '（无摘要）'}
+            </Paragraph>
+            <Paragraph>
+              <b>推荐动作：</b>
+              <Tag color={suggest.recommendation === 'approve' ? 'green' : suggest.recommendation === 'reject' ? 'red' : 'orange'}>
+                {suggest.recommendation === 'approve' ? '批准' : suggest.recommendation === 'reject' ? '拒绝' : '合并'}
+              </Tag>
+              <span style={{ color: '#888', marginLeft: 8 }}>置信度 {suggest.confidence ?? '-'}</span>
+            </Paragraph>
+            {(suggest.risks || []).length > 0 && (
+              <Alert
+                type="warning"
+                showIcon
+                message="风险提示"
+                description={suggest.risks.join('；')}
+              />
+            )}
+            {suggest.reason && (
+              <Paragraph style={{ marginTop: 12 }}><b>理由：</b>{suggest.reason}</Paragraph>
+            )}
+            {suggest.error && <Alert type="error" message={suggest.error} />}
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 }
