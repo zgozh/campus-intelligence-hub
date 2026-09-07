@@ -33,7 +33,6 @@ const MENU_ITEMS = [
   { key: "/review", icon: <CheckCircleOutlined />, i18nKey: "navigation.review" },
   { key: "/ask", icon: <MessageOutlined />, i18nKey: "navigation.ask" },
   { key: "/digests", icon: <FileTextOutlined />, i18nKey: "navigation.digests" },
-  { key: "/users", icon: <UserOutlined />, i18nKey: "navigation.users" },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

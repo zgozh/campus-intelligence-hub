@@ -47,7 +47,7 @@ from services.discover_service import discover_sources
 from services.conflict_service import conflict_detail, detect_conflicts, resolve_conflict as resolve_conflict_svc
 from services.digest_service import generate_digest
 from services.freshness_service import refresh_freshness
-from services.governance_service import archive_ko, edit_ko, publish_ko
+from services.governance_service import archive_expired, archive_ko, batch_archive, create_ko, edit_ko, publish_ko
 from services.radar_service import knowledge_health, radar_stats
 from services.review_service import approve_task, build_review_queue, reject_task
 
@@ -445,6 +445,56 @@ async def edit_knowledge_object(
         "effective_to": ko.effective_to,
         "summary": ko.summary,
     }
+
+
+class CreateKoRequest(BaseModel):
+    type: str = "Announcement"
+    title: str
+    department: str | None = None
+    effective_from: str | None = None
+    effective_to: str | None = None
+    summary: str | None = None
+    tags: list | None = None
+    facts: list | None = None
+    confidence: float | None = None
+
+
+class BatchArchiveRequest(BaseModel):
+    ids: list[str]
+
+
+@router.post("/knowledge-objects/create")
+async def create_knowledge_object(
+    req: CreateKoRequest,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """人工新增知识对象（除采集外人工录入）。"""
+    if not req.title.strip():
+        raise HTTPException(status_code=400, detail="标题不能为空")
+    ko = await create_ko(db, req.model_dump(exclude_unset=True))
+    return {"id": ko.id, "status": ko.status, "title": ko.title}
+
+
+@router.post("/knowledge-objects/batch-archive")
+async def batch_archive_knowledge_objects(
+    req: BatchArchiveRequest,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """批量归档指定知识对象。"""
+    n = await batch_archive(db, req.ids or [])
+    return {"archived": n}
+
+
+@router.post("/knowledge-objects/archive-expired")
+async def archive_expired_knowledge_objects(
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """一键归档：把所有已过期(EXPIRED)知识对象转为 ARCHIVED。"""
+    n = await archive_expired(db)
+    return {"archived": n}
 
 
 # ========== Knowledge Radar (EPIC 10) ==========

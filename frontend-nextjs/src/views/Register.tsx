@@ -23,12 +23,11 @@ export const Register = () => {
 		fetch(`${API_BASE_URL}/api/admin/registration-settings`)
 			.then((res) => res.json())
 			.then((data) => {
-				if (!data.bootstrap_required) {
-					navigate("/login", { replace: true });
-				} else {
-					setBootstrapAllowed(true);
-					setChecking(false);
-				}
+				// 注册始终可用：首个注册成为超级管理员，之后注册为普通管理员（后端已支持）
+				// eslint-disable-next-line @typescript-eslint/no-unused-vars
+				void data;
+				setBootstrapAllowed(true);
+				setChecking(false);
 			})
 			.catch(() => {
 				setError(t("errors.setupCheckFailed"));

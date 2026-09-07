@@ -1171,6 +1171,28 @@ class APIService {
 		});
 	}
 
+	async createKo(data: {
+		type?: string; title: string; department?: string;
+		effective_from?: string; effective_to?: string; summary?: string;
+		tags?: string[]; facts?: { field: string; value: string }[]; confidence?: number;
+	}): Promise<{ id: string; status: string; title: string }> {
+		return this.request(`/api/v1/knowledge-objects/create`, {
+			method: "POST",
+			body: JSON.stringify(data),
+		});
+	}
+
+	async batchArchiveKo(ids: string[]): Promise<{ archived: number }> {
+		return this.request(`/api/v1/knowledge-objects/batch-archive`, {
+			method: "POST",
+			body: JSON.stringify({ ids }),
+		});
+	}
+
+	async archiveExpiredKo(): Promise<{ archived: number }> {
+		return this.request(`/api/v1/knowledge-objects/archive-expired`, { method: "POST" });
+	}
+
 	// Change Radar APIs (EPIC 5)
 	async listChanges(severity?: string, limit = 20, offset = 0): Promise<{ changes: ChangeEvent[]; total: number }> {
 		const params = new URLSearchParams();
