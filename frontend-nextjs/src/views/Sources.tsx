@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Button, Form, Input, Modal, Popconfirm, Radio, Select, Space, Table, Tag, Typography, Upload, message } from 'antd';
+import { Button, Form, Input, Modal, Popconfirm, Radio, Select, Space, Table, Tag, Typography, message } from 'antd';
 import { CompassOutlined, PlusOutlined } from '@ant-design/icons';
 import { api } from '../services/api';
 import type { CampusSource, RecommendResult } from '../services/api';
@@ -33,6 +33,18 @@ const COLUMN_OPTIONS = [
 const valueColor: Record<string, string> = { high: 'red', medium: 'orange', low: 'default' };
 const valueZh: Record<string, string> = { high: '高价值', medium: '一般', low: '低价值' };
 
+// 预置广州大学相关站点（P1-2：自动发现默认推荐源，用户可直接选取）
+const DEFAULT_SITES: { name: string; url: string; type: string; value: string; category: string }[] = [
+  { name: '广州大学首页', url: 'https://www.gzhu.edu.cn', type: 'website', value: 'medium', category: '官网' },
+  { name: '广州大学新闻网', url: 'https://news.gzhu.edu.cn', type: 'list_page', value: 'high', category: '新闻动态' },
+  { name: '广州大学-通知公告', url: 'https://www.gzhu.edu.cn/z__l/tzgg.htm', type: 'list_page', value: 'high', category: '通知公告' },
+  { name: '广州大学教务处', url: 'https://jwc.gzhu.edu.cn', type: 'website', value: 'high', category: '教务处' },
+  { name: '广州大学研究生院', url: 'https://yjsy.gzhu.edu.cn', type: 'website', value: 'high', category: '研究生院' },
+  { name: '广州大学学生处', url: 'https://xsc.gzhu.edu.cn', type: 'website', value: 'high', category: '学生处' },
+  { name: '广州大学招生办', url: 'https://zsjy.gzhu.edu.cn', type: 'website', value: 'high', category: '招生就业' },
+  { name: '广州大学图书馆', url: 'https://lib.gzhu.edu.cn', type: 'website', value: 'medium', category: '图书馆' },
+];
+
 export default function Sources() {
   const [sources, setSources] = useState<CampusSource[]>([]);
   const [loading, setLoading] = useState(false);
@@ -52,7 +64,6 @@ export default function Sources() {
   const [discoverLoading, setDiscoverLoading] = useState(false);
   const [discovered, setDiscovered] = useState<RecommendResult['recommended']>([]);
   const [discoveredOrigin, setDiscoveredOrigin] = useState('');
-  const [uploadingId, setUploadingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -142,19 +153,6 @@ export default function Sources() {
     }
   };
 
-  const onUploadFile = async (sourceId: string, file: File) => {
-    setUploadingId(sourceId);
-    try {
-      const r = await api.ingestFile(sourceId, file);
-      message.success(`已解析入库：${r.content_len} 字符`);
-      await load();
-    } catch (e) {
-      message.error('文件解析入库失败');
-    } finally {
-      setUploadingId(null);
-    }
-  };
-
   const columns = [
     { title: '名称', dataIndex: 'name' },
     { title: '类型', dataIndex: 'source_type', width: 110 },
@@ -172,19 +170,10 @@ export default function Sources() {
     },
     {
       title: '操作',
-      width: 260,
+      width: 220,
       render: (_: unknown, record: CampusSource) => (
         <Space>
           <Button size="small" type="primary" onClick={() => openRun(record)}>采集</Button>
-          <Upload
-            showUploadList={false}
-            beforeUpload={(f) => {
-              onUploadFile(record.id, f as File);
-              return false;
-            }}
-          >
-            <Button size="small" loading={uploadingId === record.id}>上传文件</Button>
-          </Upload>
           <Button size="small" onClick={() => onPause(record.id)}>暂停</Button>
           <Popconfirm title="确认删除该数据源？" onConfirm={() => onDelete(record.id)}>
             <Button size="small" danger>删除</Button>
@@ -198,7 +187,7 @@ export default function Sources() {
     { title: '栏目/部门', dataIndex: 'name', ellipsis: true },
     { title: '推荐', dataIndex: 'value', width: 90, render: (v: string) => <Tag color={valueColor[v] || 'default'}>{valueZh[v] || v}</Tag> },
     { title: '分类', dataIndex: 'category', width: 100, render: (v: string) => <Tag color="geekblue">{v}</Tag> },
-    { title: '频率', dataIndex: 'frequency_hours', width: 90, render: (v: number) => `${v}h` },
+    { title: '频率', dataIndex: 'frequency_hours', width: 80, render: (v: number) => (v ? `${v}h` : '-') },
     { title: 'URL', dataIndex: 'url', ellipsis: true, render: (v: string) => <span style={{ fontSize: 12 }}>{v}</span> },
     {
       title: '操作',
@@ -263,6 +252,13 @@ export default function Sources() {
           <Button type="primary" onClick={runDiscover} loading={discoverLoading}>智能推荐</Button>
         </Space.Compact>
 
+        {discovered.length === 0 && (
+          <div>
+            <Typography.Text strong style={{ fontSize: 13 }}>默认推荐站点（广州大学，点击「添加」即可）：</Typography.Text>
+            <Table rowKey="url" columns={discoverColumns} dataSource={DEFAULT_SITES} pagination={false} size="small" style={{ marginTop: 12 }} />
+          </div>
+        )}
+
         {discovered.length > 0 && (
           <div>
             <Typography.Text type="secondary">从 {discoveredOrigin} 智能推荐 {discovered.length} 个候选校务源（LLM 筛高价值 + 分类 + 建议采集频率）：</Typography.Text>
@@ -281,6 +277,10 @@ export default function Sources() {
         onCancel={() => setRunOpen(false)}
         destroyOnClose
       >
+        <div style={{ marginBottom: 16, padding: '8px 12px', background: '#fafafa', borderRadius: 6, fontSize: 13 }}>
+          <div><b>{runSource?.name}</b> <span style={{ color: '#888', fontSize: 12 }}>{runSource?.source_type}</span></div>
+          <div style={{ color: '#888', fontSize: 12, wordBreak: 'break-all' }}>{runSource?.base_url || '-'}</div>
+        </div>
         <div style={{ marginBottom: 20 }}>
           <div style={{ marginBottom: 8, fontWeight: 600 }}>采集页数档位</div>
           <Radio.Group
@@ -291,9 +291,13 @@ export default function Sources() {
             buttonStyle="solid"
           />
         </div>
-        <div>
-          <div style={{ marginBottom: 8, fontWeight: 600 }}>采集内容筛选</div>
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ marginBottom: 8, fontWeight: 600 }}>采集内容筛选（栏目）</div>
           <Select style={{ width: '100%' }} value={runColumn} onChange={setRunColumn} options={COLUMN_OPTIONS} />
+        </div>
+        <div style={{ padding: '10px 12px', background: '#f6ffed', borderRadius: 6, fontSize: 12, lineHeight: 1.7 }}>
+          <b style={{ color: '#52c41a' }}>采集说明：</b>
+          采集会逐页抓取并对比页面内容。内容未变化自动跳过；发生变化则生成新版本知识对象、自动记录变更并纳入变更雷达。建议先选「1 页（仅最新）」试跑，确认站点可访问后再扩大页数。
         </div>
       </Modal>
     </div>

@@ -56,6 +56,8 @@ from services.radar_service import knowledge_health, radar_stats
 from services.review_service import approve_task, build_review_queue, reject_task
 from agents.review_advisor import audit_conflict, audit_knowledge_object
 from agents.insight_generator import generate_insight
+from agents.ko_ingest import extract_from_text
+from config import DEFAULT_AUTHORITY
 
 logger = logging.getLogger(__name__)
 
@@ -546,9 +548,74 @@ async def archive_expired_knowledge_objects(
     return {"archived": n}
 
 
+# ========== Knowledge Object 文件入库 (P2-2, LLM 抽取) ==========
+
+_KO_TYPE_MAP = {
+    "通知公告": "Announcement",
+    "办事指南": "Procedure",
+    "规章制度": "Regulation",
+    "新闻动态": "Event",
+    "政策": "Policy",
+}
+
+
+@router.post("/knowledge-objects/ingest-file")
+async def ingest_knowledge_object_file(
+    file: UploadFile = File(...),
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """上传本地 md/pdf/txt → LLM 抽取 → 创建知识对象（不依赖数据源）。"""
+    ext = os.path.splitext(file.filename or "")[1].lstrip(".").lower() or "md"
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}")
+    try:
+        tmp.write(await file.read())
+        tmp.close()
+        try:
+            content = DocumentParser().parse(tmp.name, ext)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=400, detail=f"文件解析失败: {e}")
+    finally:
+        if os.path.exists(tmp.name):
+            os.unlink(tmp.name)
+
+    if not content:
+        raise HTTPException(status_code=400, detail="文件中无可提取文本")
+
+    extr = await extract_from_text(content, file.filename or "上传文件")
+    ko = KnowledgeObject(
+        type=_KO_TYPE_MAP.get(extr["category"], "Announcement"),
+        title=extr["title"],
+        department=extr.get("department"),
+        summary=extr.get("summary"),
+        facts=extr.get("facts") or [],
+        tags=extr.get("tags") or [],
+        confidence=0.85,
+        status="PUBLISHED",
+        version=1,
+        source_url=f"file://ko/{file.filename}",
+        authority=DEFAULT_AUTHORITY,
+        freshness_level="Unknown",
+        source_version=1,
+    )
+    db.add(ko)
+    await db.flush()
+    # 语义向量入库（失败降级仅关键词检索）
+    try:
+        from agents.embedding import embed_texts
+        from services.vector_service import ensure_collection, upsert_ko
+
+        await ensure_collection()
+        embs = await embed_texts([f"{ko.title} {(ko.summary or '')[:500]}"])
+        if embs:
+            await upsert_ko(ko.id, embs[0], {"title": ko.title, "type": ko.type})
+    except Exception:  # noqa: BLE001
+        pass
+    await db.commit()
+    return {"id": ko.id, "title": ko.title, "status": ko.status, "type": ko.type}
+
+
 # ========== Knowledge Graph (A, LLM 抽取) ==========
-
-
 @router.post("/knowledge-graph/build")
 async def build_knowledge_graph(
     limit: int = 50,

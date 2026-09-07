@@ -29,9 +29,11 @@ const PALETTE: Record<string, string> = {
 export default function GraphForce({
 	entities,
 	relations,
+	onNodeClick,
 }: {
 	entities: GraphEntity[];
 	relations: GraphRelation[];
+	onNodeClick?: (node: GraphEntity) => void;
 }) {
 	const ref = useRef<HTMLDivElement>(null);
 
@@ -60,8 +62,7 @@ export default function GraphForce({
 			.map((r) => ({ source: r.head_id, target: r.tail_id, value: r.relation }));
 
 		chart.setOption({
-			backgroundColor: "#fafafa",
-			tooltip: {
+			backgroundColor: "#fafafa",			tooltip: {
 				formatter: (p: any) => {
 					if (p.dataType === "edge") {
 						const s = entities.find((e) => e.id === p.data.source)?.name || p.data.source;
@@ -101,13 +102,30 @@ export default function GraphForce({
 			],
 		});
 
+		// 节点点击 → 详情
+		chart.on("click", (params: any) => {
+			if (onNodeClick && params?.dataType === "node" && params.data?.id) {
+				const ent = entities.find((e) => e.id === params.data.id);
+				if (ent) onNodeClick(ent);
+			}
+		});
+
+		// 拦截滚轮：阻止冒泡到页面（否则滚轮变成页面上下滚动），保鼠标在图上聚焦缩放
+		const wheelHandler = (e: WheelEvent) => {
+			e.preventDefault();
+			e.stopPropagation();
+		};
+		const el = ref.current;
+		el.addEventListener("wheel", wheelHandler, { passive: false });
+
 		const ro = new ResizeObserver(() => chart.resize());
-		ro.observe(ref.current);
+		ro.observe(el);
 		return () => {
 			ro.disconnect();
+			el.removeEventListener("wheel", wheelHandler);
 			chart.dispose();
 		};
-	}, [entities, relations]);
+	}, [entities, relations, onNodeClick]);
 
 	if (entities.length === 0) {
 		return (
@@ -119,7 +137,7 @@ export default function GraphForce({
 
 	return (
 		<div style={{ position: "relative", width: "100%" }}>
-			<div ref={ref} style={{ width: "100%", height: 420 }} />
+			<div ref={ref} style={{ width: "100%", height: 420, touchAction: "none" }} />
 			<div
 				style={{
 					position: "absolute",

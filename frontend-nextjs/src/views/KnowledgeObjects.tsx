@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Button, Descriptions, Drawer, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, Typography, message } from 'antd';
-import { InboxOutlined, PlusOutlined, SwapRightOutlined } from '@ant-design/icons';
+import { Button, Descriptions, Drawer, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, Tooltip, Typography, Upload, message } from 'antd';
+import { InboxOutlined, PlusOutlined, SwapRightOutlined, UploadOutlined } from '@ant-design/icons';
 import { api } from '../services/api';
 import type { KnowledgeObject } from '../services/api';
 
@@ -33,6 +33,7 @@ export default function KnowledgeObjects() {
   const [createForm] = Form.useForm();
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [batchLoading, setBatchLoading] = useState(false);
+  const [uploadLoading, setUploadLoading] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -84,10 +85,27 @@ export default function KnowledgeObjects() {
     } finally { setBatchLoading(false); }
   };
 
+  const onUpload = async (file: File) => {
+    setUploadLoading(true);
+    try {
+      const r = await api.ingestKnowledgeObjectFile(file);
+      message.success(`已识别入库：「${r.title}」`);
+      await load();
+    } catch (e) {
+      message.error(`文件识别失败：${(e as Error)?.message || '请检查文件格式'}`);
+    } finally {
+      setUploadLoading(false);
+    }
+  };
+
   const columns = [
     { title: '类型', dataIndex: 'type', width: 110, sorter: (a: KnowledgeObject, b: KnowledgeObject) => (typeZh[a.type] || a.type).localeCompare(typeZh[b.type] || b.type), render: (t: string) => typeZh[t] || t },
     { title: '标题', dataIndex: 'title', ellipsis: true },
-    { title: '状态', dataIndex: 'status', width: 100, sorter: (a: KnowledgeObject, b: KnowledgeObject) => (a.status || '').localeCompare(b.status || ''), render: (s: string) => <Tag color={statusColor[s] || 'default'}>{statusZh[s] || s}</Tag> },
+    { title: '状态', dataIndex: 'status', width: 100, sorter: (a: KnowledgeObject, b: KnowledgeObject) => (a.status || '').localeCompare(b.status || ''), render: (s: string) => (
+      <Tooltip title={s === 'ARCHIVED' ? '已归档，不参与 AI 检索/引用' : s === 'EXPIRED' ? '已过期，默认不参与检索' : undefined}>
+        <Tag color={statusColor[s] || 'default'}>{statusZh[s] || s}</Tag>
+      </Tooltip>
+    ) },
     { title: '版本', dataIndex: 'version', width: 70, sorter: (a: KnowledgeObject, b: KnowledgeObject) => (a.version || 0) - (b.version || 0) },
     { title: '置信度', dataIndex: 'confidence', width: 90, sorter: (a: KnowledgeObject, b: KnowledgeObject) => (a.confidence || 0) - (b.confidence || 0) },
     { title: '有效期', width: 200, sorter: (a: KnowledgeObject, b: KnowledgeObject) => (a.effective_to || '').localeCompare(b.effective_to || ''), render: (_: unknown, r: KnowledgeObject) => `${r.effective_from || '-'} ~ ${r.effective_to || '-'}` },
@@ -114,6 +132,13 @@ export default function KnowledgeObjects() {
         <Space>
           <Button danger icon={<InboxOutlined />} loading={batchLoading} onClick={doArchiveExpired}>一键归档过期</Button>
           <Button icon={<SwapRightOutlined />} loading={batchLoading} disabled={selectedRowKeys.length === 0} onClick={doBatchArchive}>批量归档({selectedRowKeys.length})</Button>
+          <Upload
+            showUploadList={false}
+            accept=".md,.pdf,.txt,.docx"
+            beforeUpload={(f) => { onUpload(f as File); return false; }}
+          >
+            <Button icon={<UploadOutlined />} loading={uploadLoading}>上传文件</Button>
+          </Upload>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>新增知识对象</Button>
         </Space>
       </div>

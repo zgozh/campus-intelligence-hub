@@ -1223,6 +1223,18 @@ class APIService {
 		return this.request(`/api/v1/knowledge-objects/archive-expired`, { method: "POST" });
 	}
 
+	async ingestKnowledgeObjectFile(file: File): Promise<{ id: string; title: string; status: string; type: string }> {
+		const form = new FormData();
+		form.append("file", file);
+		const res = await fetch(`${this.baseUrl}/api/v1/knowledge-objects/ingest-file`, {
+			method: "POST",
+			headers: { Authorization: `Bearer ${localStorage.getItem("token") || ""}` },
+			body: form,
+		});
+		if (!res.ok) throw new Error(await parseErrorResponse(res));
+		return res.json();
+	}
+
 	// Knowledge Graph APIs (A, LLM 抽取)
 	async buildKnowledgeGraph(limit = 50): Promise<{ ko_count: number; relations_added: number; skipped: number }> {
 		return this.request(`/api/v1/knowledge-graph/build?limit=${limit}`, { method: "POST" });
