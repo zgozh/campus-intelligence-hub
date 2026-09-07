@@ -1091,6 +1091,10 @@ class APIService {
 		return this.request(`/api/v1/radar`);
 	}
 
+	async getKnowledgeHealth(): Promise<KnowledgeHealth> {
+		return this.request(`/api/v1/knowledge-health`);
+	}
+
 	async generateDigest(period = "daily"): Promise<DigestItem> {
 		return this.request(`/api/v1/digests/generate?period=${period}`, {
 			method: "POST",
@@ -1180,6 +1184,17 @@ export interface RadarStats {
 	published: number;
 	expired: number;
 	source_activity: { name: string; count: number }[];
+}
+
+export interface KnowledgeHealth {
+	health_score: number;
+	formula: string;
+	today: { new: number; changed: number; conflicts: number; review: number };
+	coverage: { total: number; published: number; expired: number };
+	freshness: { Fresh: number; Aging: number; Stale: number; Unknown: number };
+	conflict_rate: number;
+	review_backlog: number;
+	source_health: { total: number; error: number; ok: number };
 }
 
 export interface DigestItem {

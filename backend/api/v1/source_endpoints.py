@@ -39,7 +39,7 @@ from services.collection_service import run_collection
 from services.conflict_service import detect_conflicts
 from services.digest_service import generate_digest
 from services.freshness_service import refresh_freshness
-from services.radar_service import radar_stats
+from services.radar_service import knowledge_health, radar_stats
 from services.review_service import approve_task, build_review_queue, reject_task
 
 logger = logging.getLogger(__name__)
@@ -302,6 +302,16 @@ async def get_radar(
 ):
     """知识雷达运营统计。"""
     return await radar_stats(db)
+
+
+@router.get("/knowledge-health")
+async def get_knowledge_health(
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Knowledge Health 综合评测（覆盖/新鲜度/冲突率/审核积压/来源健康 + 公开公式）。"""
+    await refresh_freshness(db)
+    return await knowledge_health(db)
 
 
 # ========== Digest (EPIC 11) ==========
