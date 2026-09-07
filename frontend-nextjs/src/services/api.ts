@@ -1205,15 +1205,22 @@ export interface ReviewTaskItem {
 export interface AskResponse {
 	answer: string;
 	citations: {
+		id?: string;
 		title: string;
 		url?: string | null;
 		type?: string;
 		department?: string | null;
 		status?: string;
+		effective_from?: string | null;
 		effective_to?: string | null;
+		freshness?: string;
+		authority?: number | null;
+		confidence?: number | null;
 		summary?: string | null;
+		version?: number;
 	}[];
 	query: string;
+	grounded?: boolean;
 }
 
 export interface KnowledgeObject {

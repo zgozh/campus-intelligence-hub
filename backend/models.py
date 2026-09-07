@@ -632,6 +632,7 @@ class Source(Base):
     base_url = Column(String(1000), nullable=True)
     crawl_frequency = Column(Integer, nullable=False, default=24)  # 采集间隔（小时）
     max_pages = Column(Integer, nullable=False, default=1)  # 单次采集页数档位（0=全部封顶50）
+    authority = Column(Float, nullable=False, default=0.9)  # 来源权威度（配置化，#22）
     status = Column(
         SQLEnum("active", "paused", "error", name="source_status"),
         nullable=False,
@@ -731,6 +732,10 @@ class KnowledgeObject(Base):
     )  # DISCOVERED/PROCESSING/REVIEW_REQUIRED/PUBLISHED/UPDATED/EXPIRED/ARCHIVED
     version = Column(Integer, nullable=False, default=1)
     source_url = Column(String(1000), nullable=True)
+    authority = Column(Float, nullable=True, default=0.8)  # 来源权威度（配置化，用于融合检索）
+    freshness_level = Column(String(20), nullable=False, default="Unknown")  # Fresh/Aging/Stale/Unknown
+    source_version = Column(Integer, nullable=False, default=1)  # 对应 SourceVersion
+    last_verified_at = Column(DateTime(timezone=True), nullable=True)  # 最近核实/更新时间
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

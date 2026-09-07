@@ -130,7 +130,13 @@ export default function AskAI() {
                               <div style={{ fontWeight: 600 }}>[{i + 1}] {c.title}</div>
                               <div style={{ color: '#999', fontSize: 12, margin: '6px 0' }}>
                                 <Tag>{c.type}</Tag>
-                                {c.department || '未知部门'} · 有效期至 {c.effective_to || '-'}
+                                <Tag color={c.freshness === 'Fresh' ? 'green' : c.freshness === 'Aging' ? 'orange' : c.freshness === 'Stale' ? 'red' : 'default'}>
+                                  {c.freshness || '时效未知'}
+                                </Tag>
+                                {c.department || '未知部门'} · 有效期 {c.effective_from || '?'} ~ {c.effective_to || '长期'}
+                                {c.confidence != null && <> · 置信度 {(c.confidence * 100).toFixed(0)}%</>}
+                                {c.authority != null && <> · 权威度 {(c.authority * 100).toFixed(0)}</>}
+                                {c.version != null && <> · v{c.version}</>}
                               </div>
                               {c.summary && (
                                 <div style={{ fontSize: 13, color: '#666', lineHeight: 1.6, marginBottom: 6 }}>{c.summary}</div>

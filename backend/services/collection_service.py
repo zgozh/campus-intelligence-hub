@@ -121,7 +121,7 @@ async def run_collection(job_id: str) -> None:
                     )
                     for old_ko in old_kos.scalars():
                         old_ko.status = "EXPIRED"
-                    await build_knowledge_object(db, doc)
+                    await build_knowledge_object(db, doc, source)
                     await detect_and_record_change(db, source, existing, doc)
                 else:
                     doc = RawDocument(
@@ -140,7 +140,7 @@ async def run_collection(job_id: str) -> None:
                     )
                     db.add(doc)
                     saved += 1
-                    await build_knowledge_object(db, doc)
+                    await build_knowledge_object(db, doc, source)
 
             job.stage_trace = {
                 "Fetch": "ok",

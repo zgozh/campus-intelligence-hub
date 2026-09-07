@@ -20,6 +20,26 @@ DEFAULT_AGENT_ID_FILE = "/app/data/.agent_id"
 DEFAULT_AGENT_MAX_TOKENS = 1024
 DEFAULT_AGENT_SIMILARITY_THRESHOLD = 0.01  # KB hybrid search scores; default 10% (0.01)
 
+# ================= 校务检索（spec §21/§22）=================
+# 来源权威度配置（数值可配置，不硬编码业务判断）
+AUTHORITY_TIERS = {
+    "website": 0.90,
+    "list_page": 0.95,
+    "file": 0.85,
+    "manual": 0.70,
+    "api": 0.90,
+}
+DEFAULT_AUTHORITY = 0.85
+
+# 融合检索权重：score = semantic + lexical + authority + freshness + recency
+RETRIEVAL_WEIGHTS = {
+    "semantic": 0.30,
+    "lexical": 0.20,
+    "authority": 0.25,
+    "freshness": 0.15,
+    "recency": 0.10,
+}
+
 
 def _is_missing_or_insecure_secret(value: str | None) -> bool:
     normalized = (value or "").strip()
