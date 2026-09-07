@@ -1034,6 +1034,13 @@ class APIService {
 		return this.request(`/api/v1/sources`);
 	}
 
+	async discoverSources(url: string, maxLinks = 20): Promise<DiscoverResult> {
+		return this.request(`/api/v1/sources/discover`, {
+			method: "POST",
+			body: JSON.stringify({ url, max_links: maxLinks }),
+		});
+	}
+
 	async createSource(data: {
 		name: string;
 		source_type?: string;
@@ -1274,6 +1281,13 @@ export interface KnowledgeObject {
 	content?: string | null;
 	source_url?: string | null;
 	created_at?: string | null;
+}
+
+export interface DiscoverResult {
+	base_url: string;
+	origin: string;
+	discovered: { name: string; url: string; type: string; domain: string }[];
+	total: number;
 }
 
 export interface ChangeEvent {

@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Button, Form, Input, Modal, Popconfirm, Radio, Select, Space, Table, Tag, Typography, message } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import { CompassOutlined, PlusOutlined } from '@ant-design/icons';
 import { api } from '../services/api';
-import type { CampusSource } from '../services/api';
+import type { CampusSource, DiscoverResult } from '../services/api';
 
 const { Title } = Typography;
 
@@ -42,6 +42,13 @@ export default function Sources() {
   const [runMaxPages, setRunMaxPages] = useState(1);
   const [runColumn, setRunColumn] = useState('');
   const [runLoading, setRunLoading] = useState(false);
+
+  // 自动发现
+  const [discoverOpen, setDiscoverOpen] = useState(false);
+  const [discoverUrl, setDiscoverUrl] = useState('');
+  const [discoverLoading, setDiscoverLoading] = useState(false);
+  const [discovered, setDiscovered] = useState<DiscoverResult['discovered']>([]);
+  const [discoveredOrigin, setDiscoveredOrigin] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -103,6 +110,34 @@ export default function Sources() {
     await load();
   };
 
+  const runDiscover = async () => {
+    if (!discoverUrl.trim()) {
+      message.warning('请输入官网 URL');
+      return;
+    }
+    setDiscoverLoading(true);
+    try {
+      const r = await api.discoverSources(discoverUrl.trim());
+      setDiscovered(r.discovered || []);
+      setDiscoveredOrigin(r.origin || '');
+    } catch (e) {
+      message.error('自动发现失败，请检查 URL 或网络');
+      setDiscovered([]);
+    } finally {
+      setDiscoverLoading(false);
+    }
+  };
+
+  const addDiscovered = async (item: { name: string; url: string }) => {
+    try {
+      await api.createSource({ name: item.name, source_type: 'list_page', base_url: item.url });
+      message.success(`已添加数据源「${item.name}」`);
+      await load();
+    } catch (e) {
+      message.error('添加失败');
+    }
+  };
+
   const columns = [
     { title: '名称', dataIndex: 'name' },
     { title: '类型', dataIndex: 'source_type', width: 110 },
@@ -123,18 +158,24 @@ export default function Sources() {
       width: 200,
       render: (_: unknown, record: CampusSource) => (
         <Space>
-          <Button size="small" type="primary" onClick={() => openRun(record)}>
-            采集
-          </Button>
-          <Button size="small" onClick={() => onPause(record.id)}>
-            暂停
-          </Button>
+          <Button size="small" type="primary" onClick={() => openRun(record)}>采集</Button>
+          <Button size="small" onClick={() => onPause(record.id)}>暂停</Button>
           <Popconfirm title="确认删除该数据源？" onConfirm={() => onDelete(record.id)}>
-            <Button size="small" danger>
-              删除
-            </Button>
+            <Button size="small" danger>删除</Button>
           </Popconfirm>
         </Space>
+      ),
+    },
+  ];
+
+  const discoverColumns = [
+    { title: '栏目/部门', dataIndex: 'name', ellipsis: true },
+    { title: 'URL', dataIndex: 'url', ellipsis: true, render: (v: string) => <span style={{ fontSize: 12 }}>{v}</span> },
+    {
+      title: '操作',
+      width: 100,
+      render: (_: unknown, r: { name: string; url: string }) => (
+        <Button size="small" type="link" onClick={() => addDiscovered(r)}>添加</Button>
       ),
     },
   ];
@@ -143,9 +184,10 @@ export default function Sources() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Title level={4} style={{ margin: 0 }}>数据源管理</Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>
-          新增数据源
-        </Button>
+        <Space>
+          <Button icon={<CompassOutlined />} onClick={() => setDiscoverOpen(true)}>自动发现</Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>新增数据源</Button>
+        </Space>
       </div>
 
       <Table rowKey="id" columns={columns} dataSource={sources} loading={loading} pagination={false} />
@@ -173,6 +215,33 @@ export default function Sources() {
         </Form>
       </Modal>
 
+      {/* 自动发现 */}
+      <Modal
+        title="自动发现数据源"
+        open={discoverOpen}
+        onCancel={() => setDiscoverOpen(false)}
+        footer={null}
+        width={760}
+        destroyOnClose
+      >
+        <Space.Compact style={{ width: '100%', marginBottom: 16 }}>
+          <Input
+            placeholder="输入官网 URL，如 https://www.gzhu.edu.cn"
+            value={discoverUrl}
+            onChange={(e) => setDiscoverUrl(e.target.value)}
+            onPressEnter={runDiscover}
+          />
+          <Button type="primary" onClick={runDiscover} loading={discoverLoading}>开始发现</Button>
+        </Space.Compact>
+
+        {discovered.length > 0 && (
+          <div>
+            <Typography.Text type="secondary">从 {discoveredOrigin} 发现 {discovered.length} 个候选栏目/部门（同域限定）：</Typography.Text>
+            <Table rowKey="url" columns={discoverColumns} dataSource={discovered} pagination={false} size="small" style={{ marginTop: 12 }} />
+          </div>
+        )}
+      </Modal>
+
       {/* 采集弹窗 */}
       <Modal
         title={`采集「${runSource?.name || ''}」`}
@@ -195,12 +264,7 @@ export default function Sources() {
         </div>
         <div>
           <div style={{ marginBottom: 8, fontWeight: 600 }}>采集内容筛选</div>
-          <Select
-            style={{ width: '100%' }}
-            value={runColumn}
-            onChange={setRunColumn}
-            options={COLUMN_OPTIONS}
-          />
+          <Select style={{ width: '100%' }} value={runColumn} onChange={setRunColumn} options={COLUMN_OPTIONS} />
         </div>
       </Modal>
     </div>

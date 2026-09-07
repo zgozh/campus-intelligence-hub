@@ -37,6 +37,7 @@ from models import (
 )
 from services.change_service import get_change_detail, list_changes
 from services.collection_service import run_collection
+from services.discover_service import discover_sources
 from services.conflict_service import conflict_detail, detect_conflicts, resolve_conflict as resolve_conflict_svc
 from services.digest_service import generate_digest
 from services.freshness_service import refresh_freshness
@@ -79,6 +80,24 @@ async def create_source(
     await db.commit()
     await db.refresh(source)
     return source
+
+
+class DiscoverRequest(BaseModel):
+    url: str
+    max_links: int = 20
+
+
+@router.post("/sources/discover")
+async def discover_source(
+    req: DiscoverRequest,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """自动发现：输入 URL，返回同域候选栏目/部门链接（Allowed Domain 限定）。"""
+    try:
+        return await discover_sources(req.url, req.max_links)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"自动发现失败: {e}")
 
 
 @router.get("/sources/{source_id}", response_model=SourceItem)
