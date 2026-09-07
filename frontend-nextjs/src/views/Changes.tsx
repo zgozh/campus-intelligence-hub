@@ -29,6 +29,18 @@ function formatTime(t?: string | null): string {
   });
 }
 
+// 表格单元不适合渲染 markdown，剥离标记符号避免 `**内容**` 裸显
+function stripMd(text?: string | null): string {
+  return (text || '')
+    .replace(/\*\*|__/g, '')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/`/g, '')
+    .replace(/^[-*]\s+/gm, '')
+    .replace(/\*/g, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .trim();
+}
+
 export default function Changes() {
   const [items, setItems] = useState<ChangeEvent[]>([]);
   const [detail, setDetail] = useState<ChangeDetail | null>(null);
@@ -84,7 +96,7 @@ export default function Changes() {
       render: (_: unknown, r: ChangeEvent) =>
         r.old_version != null ? `v${r.old_version} → v${r.new_version}` : '-',
     },
-    { title: '变更摘要', dataIndex: 'diff_summary', ellipsis: true },
+    { title: '变更摘要', dataIndex: 'diff_summary', ellipsis: true, render: (v: string | null) => stripMd(v) },
     { title: '时间', dataIndex: 'detected_at', width: 130, render: formatTime },
     {
       title: '操作',

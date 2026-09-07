@@ -5,6 +5,7 @@ import { Alert, Button, Modal, Space, Table, Tag, Typography, message } from 'an
 import { RobotOutlined } from '@ant-design/icons';
 import { api } from '../services/api';
 import type { AIReviewSuggest, ReviewTaskItem } from '../services/api';
+import DashboardMarkdown from '../components/DashboardMarkdown';
 
 const { Title, Paragraph } = Typography;
 
@@ -112,9 +113,8 @@ export default function Review() {
           <p>正在调用模型生成审核意见…</p>
         ) : suggest ? (
           <div>
-            <Paragraph>
-              <b>要点：</b>{suggest.summary || '（无摘要）'}
-            </Paragraph>
+            <div style={{ marginBottom: 8 }}><b>要点：</b></div>
+            <DashboardMarkdown content={suggest.summary || '（无摘要）'} />
             <Paragraph>
               <b>推荐动作：</b>
               <Tag color={suggest.recommendation === 'approve' ? 'green' : suggest.recommendation === 'reject' ? 'red' : 'orange'}>
@@ -131,7 +131,10 @@ export default function Review() {
               />
             )}
             {suggest.reason && (
-              <Paragraph style={{ marginTop: 12 }}><b>理由：</b>{suggest.reason}</Paragraph>
+              <div style={{ marginTop: 12 }}>
+                <b>理由：</b>
+                <DashboardMarkdown content={suggest.reason} />
+              </div>
             )}
             {suggest.error && <Alert type="error" message={suggest.error} />}
           </div>

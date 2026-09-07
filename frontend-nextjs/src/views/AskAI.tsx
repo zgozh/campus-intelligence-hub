@@ -5,6 +5,7 @@ import { Button, Collapse, Empty, Input, Spin, Tag } from 'antd';
 import { ClearOutlined, SendOutlined } from '@ant-design/icons';
 import { api } from '../services/api';
 import type { AskResponse } from '../services/api';
+import DashboardMarkdown from '../components/DashboardMarkdown';
 
 interface ChatMessage {
   id: string;
@@ -126,7 +127,7 @@ export default function AskAI() {
                       lineHeight: 1.7,
                     }}
                   >
-                    {m.content}
+                    <DashboardMarkdown content={m.content} />
                   </div>
                   {(m.intent || m.department) && (
                     <div style={{ marginTop: 6 }}>

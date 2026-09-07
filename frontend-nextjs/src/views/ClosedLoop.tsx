@@ -1,8 +1,29 @@
 "use client";
 
 import { useState } from "react";
-import { Alert, Button, Card, Checkbox, Space, Tag, Typography, message } from "antd";
-import { PlayCircleOutlined, DeploymentUnitOutlined } from "@ant-design/icons";
+import {
+	Alert,
+	Button,
+	Card,
+	Checkbox,
+	Col,
+	Row,
+	Space,
+	Tag,
+	Typography,
+	message,
+} from "antd";
+import {
+	PlayCircleOutlined,
+	DeploymentUnitOutlined,
+	DatabaseOutlined,
+	ApartmentOutlined,
+	CheckCircleOutlined,
+	BulbOutlined,
+	MessageOutlined,
+	StarOutlined,
+} from "@ant-design/icons";
+import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import type { ClosedLoopResult } from "../services/api";
 
@@ -15,7 +36,18 @@ const STATUS_TAG: Record<string, { color: string; label: string }> = {
 	error: { color: "red", label: "异常" },
 };
 
+// AI 智能体能力矩阵（校务中台的各个 Agent）
+const AGENTS = [
+	{ name: "采集 Agent", icon: <DatabaseOutlined />, color: "#1677ff", desc: "数据源发现 / Crawl4AI 智能推荐 / 自动采集", path: "/sources" },
+	{ name: "知识治理 Agent", icon: <CheckCircleOutlined />, color: "#52c41a", desc: "冲突检测 / 审核队列 / 归档过期 / 发布流程", path: "/review" },
+	{ name: "图谱 Agent", icon: <ApartmentOutlined />, color: "#722ed1", desc: "LLM 三元组抽取 / 关系路径 / GraphRAG 子图", path: "/knowledge-graph" },
+	{ name: "洞察 Agent", icon: <BulbOutlined />, color: "#fa8c16", desc: "运营数据 → 校务洞察 / 自动日报 / 趋势风险", path: "/insights" },
+	{ name: "问答 Agent", icon: <MessageOutlined />, color: "#13c2c2", desc: "融合检索 + Rerank + 意图/部门路由 + 防幻觉", path: "/ask" },
+	{ name: "审核助手 Agent", icon: <StarOutlined />, color: "#eb2f96", desc: "AI 预审摘要 / 风险 / 推荐动作(批准/拒绝/合并)", path: "/review" },
+];
+
 export default function ClosedLoop() {
+	const navigate = useNavigate();
 	const [result, setResult] = useState<ClosedLoopResult | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [collect, setCollect] = useState(false);
@@ -35,13 +67,30 @@ export default function ClosedLoop() {
 	return (
 		<div>
 			<Title level={4} style={{ marginTop: 0 }}>
-				智能运营闭环 <span style={{ fontWeight: 400, fontSize: 14, color: "#888" }}>三层 Agent 一键编排</span>
+				AI 智能体中心 <span style={{ fontWeight: 400, fontSize: 14, color: "#888" }}>三层编排 + 能力矩阵</span>
 			</Title>
+
+			<Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+				{AGENTS.map((a) => (
+					<Col xs={24} sm={12} md={8} key={a.name}>
+						<Card size="small">
+							<div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+								<span style={{ color: a.color, fontSize: 18 }}>{a.icon}</span>
+								<Text strong>{a.name}</Text>
+							</div>
+							<div style={{ color: "#666", fontSize: 13, minHeight: 36 }}>{a.desc}</div>
+							<Button size="small" type="link" style={{ padding: 0 }} onClick={() => navigate(a.path)}>
+								进入 →
+							</Button>
+						</Card>
+					</Col>
+				))}
+			</Row>
 
 			<Card style={{ marginBottom: 16 }}>
 				<Space direction="vertical" size={8} style={{ width: "100%" }}>
 					<Text type="secondary">
-						<DeploymentUnitOutlined /> 采集 Agent → 知识治理 Agent → 问答/运营 Agent，一次运行串起「发现-采集-治理-图谱-洞察-健康」完整链路。
+						<DeploymentUnitOutlined /> 一键运行「采集 → 知识治理 → 问答/运营」三层编排，串起发现-采集-治理-图谱-洞察-健康完整链路。
 					</Text>
 					<Space wrap>
 						<Checkbox checked={collect} onChange={(e) => setCollect(e.target.checked)}>
@@ -77,12 +126,6 @@ export default function ClosedLoop() {
 						);
 					})}
 				</>
-			)}
-
-			{!result && (
-				<Card>
-					<Text type="secondary">点击「一键运行闭环」执行三层 Agent 编排。不勾选实时采集时，将基于现有数据跑治理、图谱、洞察、健康度；勾选后额外采集 active 数据源（best-effort）。</Text>
-				</Card>
 			)}
 		</div>
 	);

@@ -16,6 +16,7 @@ import {
 import { BulbOutlined, ReloadOutlined } from "@ant-design/icons";
 import { api } from "../services/api";
 import type { InsightReportItem, InsightResult } from "../services/api";
+import DashboardMarkdown from "../components/DashboardMarkdown";
 
 const { Title, Paragraph } = Typography;
 
@@ -89,7 +90,7 @@ export default function InsightsPage() {
 					</Row>
 
 					<Card title="洞察内容" style={{ marginBottom: 16 }}>
-						<Paragraph style={{ whiteSpace: "pre-wrap", lineHeight: 1.8 }}>{result.content}</Paragraph>
+						<DashboardMarkdown content={result.content} />
 					</Card>
 
 					{stats?.部门分布 && Object.keys(stats.部门分布).length > 0 && (
@@ -117,7 +118,7 @@ export default function InsightsPage() {
 							key: h.id || String(Math.random()),
 							label: `${h.created_at || ""} · ${h.content.split("\n")[0]?.slice(0, 40) || "洞察"}`,
 							children: (
-								<div style={{ whiteSpace: "pre-wrap", lineHeight: 1.8 }}>{h.content}</div>
+								<DashboardMarkdown content={h.content} />
 							),
 						}))}
 					/>

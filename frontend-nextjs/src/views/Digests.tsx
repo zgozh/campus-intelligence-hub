@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Button, Card, List, Space, Typography, message } from 'antd';
 import { api } from '../services/api';
 import type { DigestItem } from '../services/api';
+import DashboardMarkdown from '../components/DashboardMarkdown';
 
 const { Title } = Typography;
 
@@ -78,9 +79,9 @@ export default function Digests() {
 
         <Card style={{ flex: 1, minWidth: 320 }}>
           {current ? (
-            <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: 14, lineHeight: 1.7, margin: 0 }}>
-              {current.content}
-            </pre>
+            <div style={{ fontSize: 14, lineHeight: 1.7 }}>
+              <DashboardMarkdown content={current.content} />
+            </div>
           ) : (
             <p style={{ color: '#999' }}>暂无日报，点击上方按钮生成</p>
           )}

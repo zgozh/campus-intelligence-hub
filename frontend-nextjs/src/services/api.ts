@@ -1462,6 +1462,11 @@ export interface KGAskResult {
 	answer: string;
 	related: string[];
 	grounded: boolean;
+	subgraph?: {
+		nodes: { id: string; name: string; type: string }[];
+		edges: { head_id: string; tail_id: string; relation: string }[];
+	};
+	paths?: string[];
 }
 
 export interface ChangeDetail extends ChangeEvent {

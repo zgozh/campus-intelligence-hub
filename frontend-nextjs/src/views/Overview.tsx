@@ -6,6 +6,7 @@ import { WarningOutlined, SafetyOutlined, BulbOutlined, BranchesOutlined, Deploy
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import type { ChangeEvent, InsightReportItem, KnowledgeGraph, KnowledgeHealth, KnowledgeObject } from '../services/api';
+import DashboardMarkdown from '../components/DashboardMarkdown';
 
 const { Title, Paragraph } = Typography;
 
@@ -71,7 +72,7 @@ export default function Overview() {
 
   return (
     <div>
-      <Title level={3} style={{ marginTop: 0 }}>校领导驾驶舱</Title>
+      <Title level={3} style={{ marginTop: 0 }}>校务智汇中台</Title>
       <Paragraph type="secondary" style={{ marginBottom: 20 }}>
         校务知识全局视图：健康度 · 重大变更 · 风险 · 部门分布
       </Paragraph>
@@ -124,7 +125,7 @@ export default function Overview() {
             extra={<ButtonLink onClick={() => navigate('/insights')} />}
           >
             {insight ? (
-              <Paragraph ellipsis={{ rows: 3 }} style={{ whiteSpace: 'pre-wrap' }}>{insight.content}</Paragraph>
+              <DashboardMarkdown content={insight.content} />
             ) : (
               <Typography.Text type="secondary">暂无洞察报告，前往「校务洞察」点击生成。</Typography.Text>
             )}

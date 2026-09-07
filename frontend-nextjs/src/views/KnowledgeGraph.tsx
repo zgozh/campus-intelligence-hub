@@ -6,6 +6,7 @@ import { BranchesOutlined, SendOutlined } from '@ant-design/icons';
 import { api } from '../services/api';
 import type { KGAskResult, KnowledgeGraph } from '../services/api';
 import GraphForce from '../components/GraphForce';
+import DashboardMarkdown from '../components/DashboardMarkdown';
 
 const { Title, Text } = Typography;
 
@@ -140,7 +141,22 @@ export default function KnowledgeGraphPage() {
         </Space.Compact>
         {asked && (
           <div style={{ marginTop: 12 }}>
-            <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>{asked.answer}</div>
+            <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}><DashboardMarkdown content={asked.answer} /></div>
+            {asked.subgraph && asked.subgraph.nodes.length > 0 && (
+              <Card size="small" title="关系路径子图（图谱推理）" style={{ marginTop: 12 }}>
+                <GraphForce
+                  entities={asked.subgraph.nodes}
+                  relations={asked.subgraph.edges.map((e, i) => ({ id: `sg${i}`, ...e }))}
+                />
+                {asked.paths?.length > 0 && (
+                  <div style={{ marginTop: 10, borderTop: '1px solid #f0f0f0', paddingTop: 8 }}>
+                    {asked.paths.map((p, i) => (
+                      <div key={i} style={{ fontSize: 12, color: '#666', lineHeight: 1.9 }}>· {p}</div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            )}
             {(asked.intent || asked.department) && (
               <div style={{ marginTop: 8 }}>
                 {asked.intent && <Tag color="geekblue">意图：{asked.intent}</Tag>}

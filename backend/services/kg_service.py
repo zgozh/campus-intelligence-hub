@@ -182,10 +182,23 @@ async def list_graph(db, limit: int = 300) -> dict:
 
 
 async def graph_ask(db, query: str, top_k: int = 8) -> dict:
-    """图谱问答：抽查询实体 -> 图邻居 + 关联 KO 摘要 -> LLM 回答。"""
+    """图谱问答（差异化：关系路径 + 子图）：抽查询实体 → 图邻居展开 → 返回子图与路径 + LLM 解读。
+
+    与 ask AI（融合检索文字回答）不同，这里强调「结构关系 / 多跳路径」，返回可可视化的子图。
+    """
     ent_names = await extract_query_entities(query)
     graph_lines: list[str] = []
     nodes: dict[str, KGEntity] = {}
+    edges: list[dict] = []
+    seen_edge: set[tuple] = set()
+
+    def _add_edge(rel, head_id, tail_id):
+        key = (head_id, tail_id, rel.relation)
+        if key in seen_edge:
+            return
+        seen_edge.add(key)
+        edges.append({"head_id": head_id, "tail_id": tail_id, "relation": rel.relation})
+
     for name in ent_names:
         ents = (
             await db.execute(select(KGEntity).where(KGEntity.name.ilike(f"%{name}%")).limit(5))
@@ -199,6 +212,7 @@ async def graph_ask(db, query: str, top_k: int = 8) -> dict:
             )
             for rel, tail in out.all():
                 nodes[tail.id] = tail
+                _add_edge(rel, e.id, tail.id)
                 graph_lines.append(f"{e.name} -[{rel.relation}]-> {tail.name}")
             inb = await db.execute(
                 select(KGRelation, KGEntity).join(KGEntity, KGEntity.id == KGRelation.head_id).where(
@@ -207,18 +221,34 @@ async def graph_ask(db, query: str, top_k: int = 8) -> dict:
             )
             for rel, head in inb.all():
                 nodes[head.id] = head
+                _add_edge(rel, head.id, e.id)
                 graph_lines.append(f"{head.name} -[{rel.relation}]-> {e.name}")
 
     if not graph_lines:
-        return {"answer": "图谱中暂未找到与问题相关的实体关系，可先构建知识图谱。", "related": [], "grounded": False}
+        return {
+            "answer": "图谱中暂未找到与问题相关的实体关系，可先构建知识图谱。",
+            "related": [],
+            "grounded": False,
+            "subgraph": {"nodes": [], "edges": []},
+        }
 
-    ko_summaries: list[str] = []
-    ko_ids = {e.ko_id for e in nodes.values() if e.ko_id}
-    for kid in list(ko_ids)[:5]:
-        ko = await db.get(KnowledgeObject, kid)
-        if ko:
-            ko_summaries.append(f"· {ko.title}：{(ko.summary or '')[:80]}")
+    subgraph = {
+        "nodes": [{"id": e.id, "name": e.name, "type": e.entity_type} for e in nodes.values()],
+        "edges": edges,
+    }
 
-    context = "\n".join(graph_lines[:40]) + "\n\n相关知识点：\n" + "\n".join(ko_summaries)
-    answer = await ask_llm(GRAPH_PROMPT.format(context=context, query=query))
-    return {"answer": answer, "related": [n.name for n in nodes.values()], "grounded": True}
+    # 把答案定位为「关系路径解读」，而非泛泛问答
+    path_block = "\n".join(graph_lines[:40])
+    prompt = (
+        "你是校务知识关系解读助手。基于下列【关系路径】，用简洁中文说明这些实体之间的结构关系，"
+        "指出关键节点与链条。只是解读关系结构，不要当作通用问答。\n\n【关系路径】\n"
+        f"{path_block}\n\n【问题】{query}"
+    )
+    answer = await ask_llm(prompt, system="你是校务知识关系解读助手。")
+    return {
+        "answer": answer,
+        "related": [n.name for n in nodes.values()],
+        "grounded": True,
+        "subgraph": subgraph,
+        "paths": graph_lines,
+    }
