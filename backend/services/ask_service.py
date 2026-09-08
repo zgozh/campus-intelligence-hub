@@ -29,6 +29,30 @@ NO_GROUNDING_ANSWER = (
 )
 
 
+def _query_terms(query: str) -> set[str]:
+    """查询的关键词（2 字滑窗），用于相关性门控。"""
+    q = (query or "").strip()
+    if not q:
+        return set()
+    terms = set()
+    for i in range(max(1, len(q) - 1)):
+        t = q[i : i + 2]
+        if len(t) >= 2:
+            terms.add(t)
+    return terms
+
+
+def _grounding_ok(ko, query: str) -> bool:
+    """相关性门控：知识必须与查询共享关键词，否则不可作为依据（防幻觉拒答）。"""
+    terms = _query_terms(query)
+    if not terms:
+        return True
+    text = f"{ko.title or ''} {ko.summary or ''} " + " ".join(
+        str(f.get("value", "")) for f in (ko.facts or []) if isinstance(f, dict)
+    )
+    return any(t in text for t in terms)
+
+
 def _ko_text(ko) -> str:
     parts = []
     if ko.summary:
@@ -86,13 +110,13 @@ async def _graph_evidence(db, query: str, kos: list, max_lines: int = 6) -> list
     return lines
 
 
-async def ask(db, query: str, top_k: int = 5) -> dict:
+async def ask(db, query: str, top_k: int = 5, rerank: bool = True) -> dict:
     """检索（融合评分）+ 重排 + 路由 + GraphRAG → 生成答案 + 来源引用。"""
     route = route_query(query)
     kos = await search_knowledge(db, query, top_k=top_k * 2)
 
-    # ---------- Rerank 精排（gte-rerank-v2，退化时保持原序） ----------
-    if kos:
+    # ---------- Rerank 精排（gte-rerank-v2，退化时保持原序；rerank=False 跳过） ----------
+    if kos and rerank:
         docs = [(_ko_text(ko) or ko.title) for ko in kos]
         ordered = await rerank_documents(query, docs, top_n=top_k)
         if ordered:
@@ -108,6 +132,9 @@ async def ask(db, query: str, top_k: int = 5) -> dict:
             key=lambda ko: (ko.department == route["department"],),
             reverse=True,
         )
+
+    # ---------- 相关性门控（防幻觉）：知识与查询须共享关键词，否则视为无依据拒答 ----------
+    kos = [ko for ko in kos if _grounding_ok(ko, query)]
 
     # Answer Guard：无依据 → 拒答模板
     if not kos:

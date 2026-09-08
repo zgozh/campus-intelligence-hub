@@ -16,6 +16,7 @@ router = APIRouter(prefix="/api/v1")
 class AskRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=1000)
     top_k: int = Field(5, ge=1, le=20)
+    rerank: bool = True
 
 
 @router.post("/search")
@@ -49,8 +50,8 @@ async def ask_question(
     current_user: AdminUser = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """校务 AI 问答（检索 + citation + freshness-aware）。"""
-    return await ask(db, payload.query, payload.top_k)
+    """校务 AI 问答（检索 + citation + freshness-aware；rerank 控制是否用 gte-rerank-v2 精排）。"""
+    return await ask(db, payload.query, payload.top_k, rerank=payload.rerank)
 
 
 @router.get("/knowledge-objects")

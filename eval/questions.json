@@ -1,0 +1,12 @@
+[
+  {"q": "研究生奖助学金申请截止时间是什么？", "answerable": true},
+  {"q": "研究生奖助学金适用于哪些学生？", "answerable": true},
+  {"q": "研究生奖助学金申请需要提交哪些材料？", "answerable": true},
+  {"q": "新生报到需要携带什么材料？", "answerable": true},
+  {"q": "学生如何办理缓考或重修？", "answerable": true},
+  {"q": "图书馆的开放时间是怎样的？", "answerable": true},
+  {"q": "校园一卡通如何充值？", "answerable": true},
+  {"q": "学校放假安排是怎样的？", "answerable": true},
+  {"q": "今天广州的天气如何？", "answerable": false},
+  {"q": "校长最近去了哪里出差？", "answerable": false}
+]
