@@ -1197,6 +1197,11 @@ class APIService {
 		return this.request(`/api/v1/notifications/${id}/read`, { method: "POST" });
 	}
 
+	// 异常运维告警
+	async checkAlerts(): Promise<{ alerts: { level: string; title: string; detail: string }[]; created: number }> {
+		return this.request(`/api/v1/alerts/check`, { method: "POST" });
+	}
+
 	// 三层 Agent 智能运营闭环 (G)
 	async runClosedLoop(collect = false): Promise<ClosedLoopResult> {
 		return this.request(`/api/v1/closed-loop/run?collect=${collect}`, { method: "POST" });

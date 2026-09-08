@@ -54,6 +54,7 @@ from services.digest_service import generate_digest
 from services.agent_orchestrator import run_closed_loop
 from services.demo_seed import seed_demo
 from services.notify_service import push_notification
+from services.alert_service import alerts_summary, check_alerts
 from services.source_monitor import monitor_sources
 from services.source_brief_service import generate_source_brief
 from services.freshness_service import refresh_freshness
@@ -165,6 +166,25 @@ async def mark_read(
     n.read = True
     await db.commit()
     return {"id": n.id, "read": True}
+
+
+@router.get("/alerts")
+async def get_alerts(
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """异常运维告警概览（健康度/来源异常/审核积压/临期）。"""
+    return await alerts_summary(db)
+
+
+@router.post("/alerts/check")
+async def check_alerts_endpoint(
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """巡检并推送告警（写入通知中心，可选 webhook）。"""
+    result = await check_alerts(db)
+    return result
 
 
 @router.post("/sources", response_model=SourceItem, status_code=status.HTTP_201_CREATED)

@@ -1,0 +1,28 @@
+# 校务智汇中台 CI（可从 gitee 迁移到 GitHub 自动跑；复用 pytest / vitest）
+name: CI
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Backend lint + tests (pytest)
+        run: |
+          cd backend
+          python -m venv venv
+          source venv/bin/activate
+          pip install -r requirements.txt
+          python -m py_compile services/*.py api/v1/*.py agents/*.py
+          python -m pytest --ignore=tests/integration -q
+
+      - name: Frontend typecheck + tests (vitest)
+        run: |
+          cd frontend-nextjs
+          npm ci --prefer-offline --no-audit
+          npm run typecheck
+          npm run test
