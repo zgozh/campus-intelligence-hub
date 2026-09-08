@@ -88,6 +88,23 @@ pwsh scripts/demo.ps1       # 启动 → 导入演示数据 → 构建图谱 →
 
 ---
 
+## 界面预览（占位）
+
+> 以下截图请按文件名放入 `docs/screenshots/`（可替换成真实截图）。当前以占位说明列出，避免图片失效。
+
+| 页面 | 截图文件 | 展示内容 |
+| --- | --- | --- |
+| 中台驾驶舱 | `docs/screenshots/overview.png` | 健康度 / 风险 / 部门分布 / 快捷操作 / AI 洞察预览 |
+| 数据源与监控 | `docs/screenshots/sources.png` | 数据源管理 + 自动发现 + 新内容监控 |
+| 知识图谱 | `docs/screenshots/knowledge-graph.png` | 力导向图（缩放/拖拽/节点详情/类型筛选） |
+| AI 问答 | `docs/screenshots/ask.png` | 融合检索 + 证据引用 + Answer Guard 拒答 |
+| 智能体中心 | `docs/screenshots/closed-loop.png` | Agent 能力矩阵 + 一键闭环 |
+| 校务洞察 | `docs/screenshots/insights.png` | LLM 洞察 / 趋势 / 风险 |
+
+> 架构图：见上方 Mermaid 图（gitee/GitHub 可渲染）。
+
+---
+
 ## 目录结构
 
 ```

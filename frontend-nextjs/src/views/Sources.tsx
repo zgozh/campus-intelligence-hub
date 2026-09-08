@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Button, Form, Input, Modal, Popconfirm, Radio, Select, Space, Table, Tag, Typography, message } from 'antd';
+import { Button, Card, Form, Input, Modal, Popconfirm, Radio, Select, Space, Table, Tag, Typography, message } from 'antd';
 import { CompassOutlined, PlusOutlined } from '@ant-design/icons';
 import { api } from '../services/api';
-import type { CampusSource, RecommendResult } from '../services/api';
+import type { CampusSource, RecommendResult, SourceMonitor } from '../services/api';
 
 const { Title } = Typography;
 
@@ -51,6 +51,20 @@ export default function Sources() {
   const [open, setOpen] = useState(false);
   const [form] = Form.useForm();
 
+  // 数据源监控
+  const [monitor, setMonitor] = useState<SourceMonitor | null>(null);
+  const [monitorLoading, setMonitorLoading] = useState(false);
+  const loadMonitor = useCallback(async () => {
+    setMonitorLoading(true);
+    try {
+      setMonitor(await api.monitorSources(7));
+    } catch (e) {
+      message.error('监控加载失败');
+    } finally {
+      setMonitorLoading(false);
+    }
+  }, []);
+
   // 采集弹窗状态
   const [runOpen, setRunOpen] = useState(false);
   const [runSource, setRunSource] = useState<CampusSource | null>(null);
@@ -79,7 +93,8 @@ export default function Sources() {
 
   useEffect(() => {
     load();
-  }, [load]);
+    loadMonitor();
+  }, [load, loadMonitor]);
 
   const onCreate = async () => {
     const values = await form.validateFields();
@@ -209,6 +224,32 @@ export default function Sources() {
       </div>
 
       <Table rowKey="id" columns={columns} dataSource={sources} loading={loading} pagination={false} />
+
+      {/* 数据源监控：自动巡检最近 7 天新增内容 */}
+      <Card
+        title={`数据源监控（近 ${monitor?.recent_days ?? 7} 天，共发现 ${monitor?.total_new ?? 0} 条新内容）`}
+        style={{ marginTop: 16 }}
+        extra={<Button size="small" loading={monitorLoading} onClick={loadMonitor}>刷新监控</Button>}
+      >
+        {monitor && monitor.items.length > 0 ? (
+          <Space direction="vertical" style={{ width: '100%' }} size={8}>
+            {monitor.items.map((m) => (
+              <div key={m.source_id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', background: '#fafafa', borderRadius: 6 }}>
+                <Tag color={m.new_count > 0 ? 'red' : 'default'}>{m.new_count} 条新增</Tag>
+                <span style={{ fontWeight: 600, width: 160 }}>{m.name}</span>
+                <span style={{ flex: 1, color: '#888', fontSize: 12 }}>
+                  {m.recent_titles.length > 0 ? m.recent_titles.slice(0, 2).join(' / ') : '近 7 天暂无新内容'}
+                </span>
+                <span style={{ color: '#999', fontSize: 12, whiteSpace: 'nowrap' }}>
+                  {m.last_crawled_at ? `最近采集 ${new Date(m.last_crawled_at).toLocaleString()}` : '尚未采集'}
+                </span>
+              </div>
+            ))}
+          </Space>
+        ) : (
+          <Typography.Text type="secondary">暂无数据源，或近 7 天没有新内容。</Typography.Text>
+        )}
+      </Card>
 
       {/* 新增数据源 */}
       <Modal title="新增数据源" open={open} onOk={onCreate} onCancel={() => setOpen(false)} destroyOnClose>

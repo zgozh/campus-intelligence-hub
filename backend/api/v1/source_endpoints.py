@@ -51,6 +51,7 @@ from services.conflict_service import conflict_detail, detect_conflicts, resolve
 from services.digest_service import generate_digest
 from services.agent_orchestrator import run_closed_loop
 from services.demo_seed import seed_demo
+from services.source_monitor import monitor_sources
 from services.freshness_service import refresh_freshness
 from services.governance_service import archive_expired, archive_ko, batch_archive, create_ko, edit_ko, publish_ko
 from services.radar_service import knowledge_health, radar_stats
@@ -77,6 +78,16 @@ async def list_sources(
     sources = result.scalars().all()
     total = await db.scalar(select(func.count(Source.id)))
     return SourceListResponse(sources=list(sources), total=total or 0)
+
+
+@router.get("/sources/monitor")
+async def sources_monitor(
+    recent_days: int = 7,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """数据源监控：每源的最近采集时间 / 近 N 天新增内容数 / 最新标题（发现新消息/新通知）。"""
+    return await monitor_sources(db, recent_days=recent_days)
 
 
 @router.post("/sources", response_model=SourceItem, status_code=status.HTTP_201_CREATED)

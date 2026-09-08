@@ -5,6 +5,14 @@
 
 ---
 
+## 📚 重要文档导航
+
+- [README.md](README.md) · [COMPETITION_SUBMISSION.md](COMPETITION_SUBMISSION.md) · [DEMO_SCRIPT.md](DEMO_SCRIPT.md) · [EVAL_REPORT.md](EVAL_REPORT.md)
+- [ENHANCEMENT_V3_SPEC.md](ENHANCEMENT_V3_SPEC.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [DECISIONS.md](DECISIONS.md) · [OSS_REUSE.md](OSS_REUSE.md)
+- [scripts/demo.ps1](scripts/demo.ps1) · [scripts/eval_grounding.py](scripts/eval_grounding.py) · [eval/questions.json](eval/questions.json) · [backend/services/demo_seed.py](backend/services/demo_seed.py)
+
+---
+
 ## 一句话定位
 
 让高校校务信息**自动更新、可信可查、AI 可用**的一站式知识中台——不是聊天机器人，而是"校务知识的自动化数据中心"。

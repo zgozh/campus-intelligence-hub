@@ -117,6 +117,10 @@ export default function GraphForce({
 		};
 		const el = ref.current;
 		el.addEventListener("wheel", wheelHandler, { passive: false });
+		// zrender 层也阻断滚轮传播（双保险）
+		try {
+			chart.getZr().on('mousewheel', (e: any) => { if (e && e.stop) e.stop(); });
+		} catch { /* 忽略 */ }
 
 		const ro = new ResizeObserver(() => chart.resize());
 		ro.observe(el);
@@ -137,7 +141,13 @@ export default function GraphForce({
 
 	return (
 		<div style={{ position: "relative", width: "100%" }}>
-			<div ref={ref} style={{ width: "100%", height: 420, touchAction: "none" }} />
+			<div
+				ref={ref}
+				tabIndex={0}
+				onMouseEnter={(e) => e.currentTarget.focus()}
+				onMouseDown={(e) => e.preventDefault()}
+				style={{ width: "100%", height: 420, touchAction: "none", outline: "none", cursor: "grab" }}
+			/>
 			<div
 				style={{
 					position: "absolute",

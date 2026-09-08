@@ -1034,6 +1034,10 @@ class APIService {
 		return this.request(`/api/v1/sources`);
 	}
 
+	async monitorSources(recentDays = 7): Promise<SourceMonitor> {
+		return this.request(`/api/v1/sources/monitor?recent_days=${recentDays}`);
+	}
+
 	async discoverSources(url: string, maxLinks = 20): Promise<DiscoverResult> {
 		return this.request(`/api/v1/sources/discover`, {
 			method: "POST",
@@ -1428,6 +1432,22 @@ export interface KnowledgeObject {
 	content?: string | null;
 	source_url?: string | null;
 	created_at?: string | null;
+}
+
+export interface SourceMonitor {
+	recent_days: number;
+	total_new: number;
+	sources: number;
+	items: {
+		source_id: string;
+		name: string;
+		source_type: string;
+		base_url?: string | null;
+		status: string;
+		last_crawled_at?: string | null;
+		new_count: number;
+		recent_titles: string[];
+	}[];
 }
 
 export interface DiscoverResult {
