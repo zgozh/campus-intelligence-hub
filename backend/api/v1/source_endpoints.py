@@ -30,6 +30,7 @@ from api.v1.schemas import (
 from database import get_db
 from models import (
     AdminUser,
+    BriefReport,
     CollectionJob,
     Conflict,
     Digest,
@@ -52,6 +53,7 @@ from services.digest_service import generate_digest
 from services.agent_orchestrator import run_closed_loop
 from services.demo_seed import seed_demo
 from services.source_monitor import monitor_sources
+from services.source_brief_service import generate_source_brief
 from services.freshness_service import refresh_freshness
 from services.governance_service import archive_expired, archive_ko, batch_archive, create_ko, edit_ko, publish_ko
 from services.radar_service import knowledge_health, radar_stats
@@ -88,6 +90,30 @@ async def sources_monitor(
 ):
     """数据源监控：每源的最近采集时间 / 近 N 天新增内容数 / 最新标题（发现新消息/新通知）。"""
     return await monitor_sources(db, recent_days=recent_days)
+
+
+@router.post("/sources/brief")
+async def generate_brief_endpoint(
+    days: int = 7,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """一键生成校务快讯（自动化巡检：按来源/部门汇总近 N 天新增内容 + 变更 + 临期）。"""
+    return await generate_source_brief(db, days=days, persist=True)
+
+
+@router.get("/sources/brief")
+async def list_brief_endpoint(
+    limit: int = 10,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """历史校务快讯列表。"""
+    result = await db.execute(
+        select(BriefReport).order_by(BriefReport.created_at.desc()).limit(limit)
+    )
+    reports = result.scalars().all()
+    return {"reports": list(reports), "total": len(reports)}
 
 
 @router.post("/sources", response_model=SourceItem, status_code=status.HTTP_201_CREATED)

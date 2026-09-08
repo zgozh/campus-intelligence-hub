@@ -1038,6 +1038,14 @@ class APIService {
 		return this.request(`/api/v1/sources/monitor?recent_days=${recentDays}`);
 	}
 
+	async generateBrief(days = 7): Promise<BriefResult> {
+		return this.request(`/api/v1/sources/brief?days=${days}`, { method: "POST" });
+	}
+
+	async listBrief(limit = 10): Promise<{ reports: BriefReportItem[]; total: number }> {
+		return this.request(`/api/v1/sources/brief?limit=${limit}`);
+	}
+
 	async discoverSources(url: string, maxLinks = 20): Promise<DiscoverResult> {
 		return this.request(`/api/v1/sources/discover`, {
 			method: "POST",
@@ -1448,6 +1456,18 @@ export interface SourceMonitor {
 		new_count: number;
 		recent_titles: string[];
 	}[];
+}
+
+export interface BriefResult {
+	id?: string;
+	content: string;
+	data?: unknown;
+	created_at?: string;
+}
+
+export interface BriefReportItem extends BriefResult {
+	id: string;
+	created_at?: string;
 }
 
 export interface DiscoverResult {

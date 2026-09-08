@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Button, Card, Form, Input, Modal, Popconfirm, Radio, Select, Space, Table, Tag, Typography, message } from 'antd';
 import { CompassOutlined, PlusOutlined } from '@ant-design/icons';
 import { api } from '../services/api';
-import type { CampusSource, RecommendResult, SourceMonitor } from '../services/api';
+import type { BriefResult, CampusSource, RecommendResult, SourceMonitor } from '../services/api';
+import DashboardMarkdown from '../components/DashboardMarkdown';
 
 const { Title } = Typography;
 
@@ -54,6 +55,8 @@ export default function Sources() {
   // 数据源监控
   const [monitor, setMonitor] = useState<SourceMonitor | null>(null);
   const [monitorLoading, setMonitorLoading] = useState(false);
+  const [brief, setBrief] = useState<BriefResult | null>(null);
+  const [briefLoading, setBriefLoading] = useState(false);
   const loadMonitor = useCallback(async () => {
     setMonitorLoading(true);
     try {
@@ -64,6 +67,17 @@ export default function Sources() {
       setMonitorLoading(false);
     }
   }, []);
+  const genBrief = async () => {
+    setBriefLoading(true);
+    try {
+      setBrief(await api.generateBrief(7));
+      message.success('校务快讯已生成');
+    } catch (e) {
+      message.error(`快讯生成失败：${(e as Error)?.message || '请配置模型 API Key'}`);
+    } finally {
+      setBriefLoading(false);
+    }
+  };
 
   // 采集弹窗状态
   const [runOpen, setRunOpen] = useState(false);
@@ -229,7 +243,12 @@ export default function Sources() {
       <Card
         title={`数据源监控（近 ${monitor?.recent_days ?? 7} 天，共发现 ${monitor?.total_new ?? 0} 条新内容）`}
         style={{ marginTop: 16 }}
-        extra={<Button size="small" loading={monitorLoading} onClick={loadMonitor}>刷新监控</Button>}
+        extra={
+          <Space size={8}>
+            <Button size="small" loading={briefLoading} onClick={genBrief}>一键生成校务快讯</Button>
+            <Button size="small" loading={monitorLoading} onClick={loadMonitor}>刷新监控</Button>
+          </Space>
+        }
       >
         {monitor && monitor.items.length > 0 ? (
           <Space direction="vertical" style={{ width: '100%' }} size={8}>
@@ -248,6 +267,12 @@ export default function Sources() {
           </Space>
         ) : (
           <Typography.Text type="secondary">暂无数据源，或近 7 天没有新内容。</Typography.Text>
+        )}
+        {brief && (
+          <div style={{ marginTop: 16, borderTop: '1px solid #f0f0f0', paddingTop: 12 }}>
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>校务快讯（LLM 巡检）</div>
+            <DashboardMarkdown content={brief.content} />
+          </div>
         )}
       </Card>
 

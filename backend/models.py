@@ -860,3 +860,16 @@ class InsightReport(Base):
     content = Column(Text, nullable=False)  # Markdown 洞察叙事
     data = Column(JSON, nullable=True)  # 生成时的运营数据快照
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class BriefReport(Base):
+    """校务快讯（自动化巡检）：按来源/部门汇总近 N 天新增内容 + 重要变更 + 临期提醒。"""
+
+    __tablename__ = "brief_reports"
+
+    id = Column(
+        String(50), primary_key=True, default=lambda: f"br_{uuid.uuid4().hex[:12]}"
+    )
+    content = Column(Text, nullable=False)  # Markdown 校务快讯
+    data = Column(JSON, nullable=True)  # 生成时的监控数据快照
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

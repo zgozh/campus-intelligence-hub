@@ -499,3 +499,43 @@ class CampusInsightScheduler:
 
 
 campus_insight_scheduler = CampusInsightScheduler()
+
+
+class CampusBriefScheduler:
+    """校务快讯自动巡检调度（自动化）：每 6 小时生成一次校务快讯并落盘。"""
+
+    def __init__(self):
+        self.scheduler = AsyncIOScheduler()
+        self.running = False
+
+    def start(self):
+        if self.running:
+            return
+        self.scheduler.start()
+        self.running = True
+        self.scheduler.add_job(
+            self.generate_brief_job,
+            trigger=IntervalTrigger(hours=6),
+            id="campus_brief",
+            name="Generate campus brief every 6h",
+            replace_existing=True,
+        )
+        logger.info("Campus brief scheduler started (every 6 hours)")
+
+    def stop(self):
+        if self.running:
+            self.scheduler.shutdown()
+            self.running = False
+
+    async def generate_brief_job(self):
+        from services.source_brief_service import generate_source_brief
+
+        try:
+            async with AsyncSessionLocal() as db:
+                r = await generate_source_brief(db, days=7, persist=True)
+                logger.info("校务快讯生成：%s", r.get("id"))
+        except Exception as e:
+            logger.exception("Error in campus brief generation: %s", e)
+
+
+campus_brief_scheduler = CampusBriefScheduler()
