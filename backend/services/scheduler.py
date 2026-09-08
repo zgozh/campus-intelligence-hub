@@ -529,10 +529,12 @@ class CampusBriefScheduler:
 
     async def generate_brief_job(self):
         from services.source_brief_service import generate_source_brief
+        from services.notify_service import push_notification
 
         try:
             async with AsyncSessionLocal() as db:
                 r = await generate_source_brief(db, days=7, persist=True)
+                await push_notification(db, "brief", "自动巡检 · 校务快讯（近 7 天）", r.get("content"))
                 logger.info("校务快讯生成：%s", r.get("id"))
         except Exception as e:
             logger.exception("Error in campus brief generation: %s", e)

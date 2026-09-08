@@ -206,6 +206,9 @@ class Settings(BaseSettings):
     # 日志
     log_level: str = "info"
 
+    # 主动推送：群机器人 webhook（如飞书/企微/钉钉群机器人），留空则仅站内通知
+    campus_notify_webhook: str = ""
+
     def model_post_init(self, __context) -> None:
         secret_key_file = self.secret_key_file.strip() or "/app/data/.secret_key"
         object.__setattr__(self, "secret_key_file", secret_key_file)

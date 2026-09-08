@@ -1183,6 +1183,20 @@ class APIService {
 		return this.request(`/api/v1/insights?limit=${limit}`);
 	}
 
+	// 主动推送 · 站内通知
+	async listNotifications(limit = 20, unreadOnly = false): Promise<{ notifications: NotificationItem[]; total: number }> {
+		const q = unreadOnly ? `&unread_only=true` : "";
+		return this.request(`/api/v1/notifications?limit=${limit}${q}`);
+	}
+
+	async getUnreadCount(): Promise<{ unread: number }> {
+		return this.request(`/api/v1/notifications/unread-count`);
+	}
+
+	async markNotificationRead(id: string): Promise<{ id: string; read: boolean }> {
+		return this.request(`/api/v1/notifications/${id}/read`, { method: "POST" });
+	}
+
 	// 三层 Agent 智能运营闭环 (G)
 	async runClosedLoop(collect = false): Promise<ClosedLoopResult> {
 		return this.request(`/api/v1/closed-loop/run?collect=${collect}`, { method: "POST" });
@@ -1467,6 +1481,15 @@ export interface BriefResult {
 
 export interface BriefReportItem extends BriefResult {
 	id: string;
+	created_at?: string;
+}
+
+export interface NotificationItem {
+	id: string;
+	kind: string;
+	title: string;
+	content?: string | null;
+	read: boolean;
 	created_at?: string;
 }
 

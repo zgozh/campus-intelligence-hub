@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { Avatar, Button, Layout, Menu, theme } from "antd";
+import { useMemo, useState, useEffect } from "react";
+import { Avatar, Badge, Button, Empty, Layout, List, Menu, Popover, Tag, theme } from "antd";
 import {
   ApartmentOutlined,
   BellOutlined,
@@ -22,6 +22,8 @@ import {
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
+import { api } from "../services/api";
+import type { NotificationItem } from "../services/api";
 
 const { Sider, Header, Content } = Layout;
 
@@ -47,6 +49,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const { admin, logout } = useAuth();
   const { t } = useTranslation("common");
   const { token } = theme.useToken();
+  const [unread, setUnread] = useState(0);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+
+  useEffect(() => {
+    try { api.getUnreadCount().then((d) => setUnread(d.unread ?? 0)).catch(() => {}); } catch { /* 忽略 */ }
+    try { api.listNotifications(10).then((d) => setNotifications(d.notifications || [])).catch(() => {}); } catch { /* 忽略 */ }
+  }, []);
+
+  const markRead = async (id: string) => {
+    await api.markNotificationRead(id).catch(() => {});
+    setNotifications((n) => n.map((x) => (x.id === id ? { ...x, read: true } : x)));
+    api.getUnreadCount().then((d) => setUnread(d.unread ?? 0)).catch(() => {});
+  };
 
   const menuItems = useMemo(
     () =>
@@ -124,8 +139,49 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             background: token.colorBgContainer,
             padding: "0 24px",
             borderBottom: `1px solid ${token.colorBorderSecondary}`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-end",
           }}
-        />
+        >
+          <Popover
+            trigger="click"
+            placement="bottomRight"
+            content={
+              <div style={{ width: 340 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <b>通知中心</b>
+                  <Button type="link" size="small" onClick={() => navigate("/notifications")}>查看全部</Button>
+                </div>
+                {notifications.length === 0 ? (
+                  <Empty description="暂无通知" imageStyle={{ height: 50 }} />
+                ) : (
+                  <List
+                    size="small"
+                    dataSource={notifications}
+                    renderItem={(n) => (
+                      <List.Item onClick={() => markRead(n.id)} style={{ cursor: "pointer" }}>
+                        <List.Item.Meta
+                          title={
+                            <span style={{ fontWeight: n.read ? 400 : 600 }}>
+                              <Tag color={n.read ? "default" : "blue"}>{n.kind}</Tag>
+                              {n.title}
+                            </span>
+                          }
+                          description={new Date(n.created_at || "").toLocaleString()}
+                        />
+                      </List.Item>
+                    )}
+                  />
+                )}
+              </div>
+            }
+          >
+            <Badge count={unread} size="small">
+              <Button type="text" icon={<BellOutlined />} style={{ fontSize: 18 }} />
+            </Badge>
+          </Popover>
+        </Header>
         <Content style={{ padding: 24, background: token.colorBgLayout, minHeight: "calc(100vh - 64px)" }}>
           {children}
         </Content>

@@ -873,3 +873,18 @@ class BriefReport(Base):
     content = Column(Text, nullable=False)  # Markdown 校务快讯
     data = Column(JSON, nullable=True)  # 生成时的监控数据快照
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class Notification(Base):
+    """站内通知（主动推送）：校务快讯 / 洞察 / 临期等自动推送。"""
+
+    __tablename__ = "notifications"
+
+    id = Column(
+        String(50), primary_key=True, default=lambda: f"ntf_{uuid.uuid4().hex[:12]}"
+    )
+    kind = Column(String(30), nullable=False)  # brief / insight / expiring / system
+    title = Column(String(200), nullable=False)
+    content = Column(Text, nullable=True)  # markdown 摘要
+    read = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

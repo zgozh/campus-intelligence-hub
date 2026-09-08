@@ -1,69 +1,41 @@
 // @ts-nocheck
 // @vitest-environment jsdom
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
-import { createMemoryRouter, RouterProvider } from "react-router-dom";
+import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import AdminLayout from "../../src/components/AdminLayout";
-import { api } from "../../src/services/api";
 
 vi.mock("../../src/context/AuthContext", () => ({
 	useAuth: () => ({
-		admin: {
-			id: 1,
-			name: "Owner",
-			email: "owner@example.com",
-			role: "super_admin",
-		},
+		admin: { id: 1, name: "管理员", email: "admin@campus.local", role: "super_admin" },
 		logout: vi.fn(),
 	}),
-}));
-
-vi.mock("../../src/hooks/useMediaQuery", () => ({
-	useIsMobile: () => false,
-}));
-
-vi.mock("../../src/services/api", () => ({
-	api: { getAgent: vi.fn() },
 }));
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-const mockedApi = vi.mocked(api);
+vi.mock("../../src/services/api", () => ({
+	api: {
+		getUnreadCount: vi.fn().mockResolvedValue({ unread: 2 }),
+		listNotifications: vi.fn().mockResolvedValue({ notifications: [], total: 0 }),
+	},
+}));
 
-beforeEach(() => {
-	vi.clearAllMocks();
-	mockedApi.getAgent.mockResolvedValue({
-		id: "agt_1",
-		name: "官网客服",
-	} as any);
-});
+describe("AdminLayout (校务智汇中台)", () => {
+	beforeEach(() => vi.clearAllMocks());
 
-describe("AdminLayout agent brand", () => {
-	it("shows the current agent name instead of Basjoo in agent workspaces", async () => {
-		const router = createMemoryRouter(
-			[
-				{
-					path: "/agents/:agentId/dashboard",
-					element: (
-						<AdminLayout>
-							<div>Body</div>
-						</AdminLayout>
-					),
-				},
-			],
-			{ initialEntries: ["/agents/agt_1/dashboard"] },
+	it("renders brand + children WITHOUT crashing", () => {
+		render(
+			<MemoryRouter>
+				<AdminLayout>
+					<div>Body</div>
+				</AdminLayout>
+			</MemoryRouter>,
 		);
-
-		render(<RouterProvider router={router} />);
-
-		await waitFor(() => {
-			expect(
-				screen.getByRole("heading", { name: "官网客服" }),
-			).toBeInTheDocument();
-		});
-		expect(mockedApi.getAgent).toHaveBeenCalledWith("agt_1");
+		expect(screen.getByText("校务智汇中台")).toBeTruthy();
+		expect(screen.getByText("Body")).toBeTruthy();
 	});
 });

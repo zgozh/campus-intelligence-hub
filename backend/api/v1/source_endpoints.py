@@ -36,6 +36,7 @@ from models import (
     Digest,
     InsightReport,
     KnowledgeObject,
+    Notification,
     RawDocument,
     ReviewTask,
     Source,
@@ -52,6 +53,7 @@ from services.conflict_service import conflict_detail, detect_conflicts, resolve
 from services.digest_service import generate_digest
 from services.agent_orchestrator import run_closed_loop
 from services.demo_seed import seed_demo
+from services.notify_service import push_notification
 from services.source_monitor import monitor_sources
 from services.source_brief_service import generate_source_brief
 from services.freshness_service import refresh_freshness
@@ -99,7 +101,9 @@ async def generate_brief_endpoint(
     db: AsyncSession = Depends(get_db),
 ):
     """一键生成校务快讯（自动化巡检：按来源/部门汇总近 N 天新增内容 + 变更 + 临期）。"""
-    return await generate_source_brief(db, days=days, persist=True)
+    brief = await generate_source_brief(db, days=days, persist=True)
+    await push_notification(db, "brief", f"校务快讯（近 {days} 天）", brief["content"])
+    return brief
 
 
 @router.get("/sources/brief")
@@ -114,6 +118,53 @@ async def list_brief_endpoint(
     )
     reports = result.scalars().all()
     return {"reports": list(reports), "total": len(reports)}
+
+
+# ========== 主动推送 · 站内通知 ==========
+
+
+@router.get("/notifications")
+async def list_notifications(
+    limit: int = 20,
+    unread_only: bool = False,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """通知列表（未读优先 + 时间倒序）。"""
+    q = select(Notification).order_by(Notification.read.asc(), Notification.created_at.desc()).limit(limit)
+    if unread_only:
+        q = select(Notification).where(Notification.read == False).order_by(Notification.created_at.desc()).limit(limit)  # noqa: E712
+    rows = (await db.execute(q)).scalars().all()
+    return {
+        "notifications": [
+            {"id": n.id, "kind": n.kind, "title": n.title, "content": n.content, "read": n.read, "created_at": n.created_at}
+            for n in rows
+        ],
+        "total": len(rows),
+    }
+
+
+@router.get("/notifications/unread-count")
+async def unread_count(
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    unread = await db.scalar(select(func.count(Notification.id)).where(Notification.read == False))  # noqa: E712
+    return {"unread": int(unread or 0)}
+
+
+@router.post("/notifications/{notification_id}/read")
+async def mark_read(
+    notification_id: str,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    n = await db.get(Notification, notification_id)
+    if not n:
+        raise HTTPException(status_code=404, detail="通知不存在")
+    n.read = True
+    await db.commit()
+    return {"id": n.id, "read": True}
 
 
 @router.post("/sources", response_model=SourceItem, status_code=status.HTTP_201_CREATED)
@@ -773,7 +824,9 @@ async def generate_insights_endpoint(
     db: AsyncSession = Depends(get_db),
 ):
     """AI 校务洞察：基于运营数据（新增/变更/冲突/审核/来源/临期）由 LLM 生成并落盘。"""
-    return await generate_insight(db, persist=True)
+    ins = await generate_insight(db, persist=True)
+    await push_notification(db, "insight", "AI 校务洞察", ins.get("content"))
+    return ins
 
 
 @router.get("/insights")
