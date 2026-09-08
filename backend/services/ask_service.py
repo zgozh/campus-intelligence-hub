@@ -29,28 +29,29 @@ NO_GROUNDING_ANSWER = (
 )
 
 
-def _query_terms(query: str) -> set[str]:
-    """查询的关键词（2 字滑窗），用于相关性门控。"""
-    q = (query or "").strip()
-    if not q:
-        return set()
-    terms = set()
-    for i in range(max(1, len(q) - 1)):
-        t = q[i : i + 2]
-        if len(t) >= 2:
-            terms.add(t)
-    return terms
+_STOP_CHARS = set("的了是吗呢怎怎么如何什么是吗哪哪里今天明天学校广州附近哪些可以能会何")
+
+
+def _shingles(text: str, n: int) -> set[str]:
+    return {text[i : i + n] for i in range(max(1, len(text) - n + 1)) if len(text[i : i + n]) == n}
 
 
 def _grounding_ok(ko, query: str) -> bool:
-    """相关性门控：知识必须与查询共享关键词，否则不可作为依据（防幻觉拒答）。"""
-    terms = _query_terms(query)
-    if not terms:
+    """相关性门控（防幻觉）：知识必须与查询共享具体内容词才可作为依据。
+
+    优先要求 ≥3 字连续子串命中（比 2 字滑窗更具体，避免"广州/学校"这类常见词误伤）；
+    无 3 字命中时，弱回退到排除常见单字后的 2 字词。
+    """
+    q = (query or "").strip()
+    if len(q) < 3:
         return True
     text = f"{ko.title or ''} {ko.summary or ''} " + " ".join(
         str(f.get("value", "")) for f in (ko.facts or []) if isinstance(f, dict)
     )
-    return any(t in text for t in terms)
+    if any(t in text for t in _shingles(q, 3)):
+        return True
+    s2 = {t for t in _shingles(q, 2) if not any(c in _STOP_CHARS for c in t)}
+    return any(t in text for t in s2)
 
 
 def _ko_text(ko) -> str:

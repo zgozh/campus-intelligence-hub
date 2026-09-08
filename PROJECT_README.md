@@ -39,6 +39,23 @@
 校务洞察（LLM 日报 / 趋势 / 风险）+ 三层 Agent 闭环
 ```
 
+**架构图**（Mermaid）：
+
+```mermaid
+flowchart LR
+  SUB[数据源<br/>官网/文件/API] --> DISCOVER[采集 Agent<br/>发现+LLM智能推荐]
+  DISCOVER --> CRAWL[Scrapling 采集<br/>解析/去重/版本化]
+  CRAWL --> KG[知识对象]
+  KG --> CHANGE[LLM 变化检测<br/>变更雷达/Diff]
+  KG --> GRAPH[知识图谱<br/>三元组抽取/关系路径]
+  KG --> GOV[知识治理<br/>冲突/审核/AI预审]
+  GRAPH --> ASK[可信问答<br/>融合检索+Rerank+路由+防幻觉]
+  GOV --> ASK
+  ASK --> INSIGHT[校务洞察<br/>LLM 日报/趋势/风险]
+  INSIGHT --> LOOP[三层 Agent 闭环]
+  LOOP --> SUB
+```
+
 ## 功能矩阵
 
 - **采集**：数据源管理 / 自动发现 / AI 智能推荐（Crawl4AI 式）/ 文件入库 / 定时任务
