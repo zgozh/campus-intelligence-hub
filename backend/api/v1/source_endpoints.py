@@ -50,6 +50,7 @@ from services.discover_service import discover_sources
 from services.conflict_service import conflict_detail, detect_conflicts, resolve_conflict as resolve_conflict_svc
 from services.digest_service import generate_digest
 from services.agent_orchestrator import run_closed_loop
+from services.demo_seed import seed_demo
 from services.freshness_service import refresh_freshness
 from services.governance_service import archive_expired, archive_ko, batch_archive, create_ko, edit_ko, publish_ko
 from services.radar_service import knowledge_health, radar_stats
@@ -715,6 +716,15 @@ async def run_closed_loop_endpoint(
 ):
     """一键智能运营闭环：采集 Agent → 知识治理 Agent → 问答/运营 Agent。"""
     return await run_closed_loop(db, collect=collect)
+
+
+@router.post("/demo/seed")
+async def seed_demo_data(
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """一键导入演示数据（真实风格的校务知识，按标题幂等）。用于演示/评测填充。"""
+    return await seed_demo(db)
 
 
 # ========== 校务洞察 (F, LLM) ==========

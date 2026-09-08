@@ -1176,6 +1176,11 @@ class APIService {
 		return this.request(`/api/v1/closed-loop/run?collect=${collect}`, { method: "POST" });
 	}
 
+	// 一键导入演示数据 (A2)
+	async seedDemo(): Promise<{ created: number; skipped: number }> {
+		return this.request(`/api/v1/demo/seed`, { method: "POST" });
+	}
+
 	// Knowledge Object APIs
 	async listKnowledgeObjects(): Promise<{ objects: KnowledgeObject[]; total: number }> {
 		return this.request(`/api/v1/knowledge-objects`);

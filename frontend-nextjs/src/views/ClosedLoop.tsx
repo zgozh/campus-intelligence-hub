@@ -51,7 +51,8 @@ export default function ClosedLoop() {
 	const [result, setResult] = useState<ClosedLoopResult | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [collect, setCollect] = useState(false);
-	const [stats, setStats] = useState({ sources: 0, pending: 0, entities: 0, relations: 0, reports: 0, health: 0 });
+	const [seedLoading, setSeedLoading] = useState(false);
+	const [stats, setStats] = useState({ sources: 0, pending: 0, entities: 0, relations: 0, reports: 0, health: 0, objects: 0, kos: 0 });
 
 	useEffect(() => {
 		api.listSources().then((d) => setStats((s) => ({ ...s, sources: d.total }))).catch(() => {});
@@ -82,6 +83,21 @@ export default function ClosedLoop() {
 			message.error(`闭环执行失败：${(e as Error)?.message || "请配置模型 API Key"}`);
 		} finally {
 			setLoading(false);
+		}
+	};
+
+	const seed = async () => {
+		setSeedLoading(true);
+		try {
+			const r = await api.seedDemo();
+			message.success(`已导入演示数据：新增 ${r.created} 条（跳过 ${r.skipped}）`);
+			// 刷新统计
+			api.listSources().then((d) => setStats((s) => ({ ...s, sources: d.total }))).catch(() => {});
+			api.listKnowledgeObjects().then((d) => setStats((s) => ({ ...s, objects: d.total }))).catch(() => {});
+		} catch (e) {
+			message.error(`导入演示数据失败：${(e as Error)?.message || "请稍后重试"}`);
+		} finally {
+			setSeedLoading(false);
 		}
 	};
 
@@ -120,6 +136,9 @@ export default function ClosedLoop() {
 						</Checkbox>
 						<Button type="primary" icon={<PlayCircleOutlined />} loading={loading} onClick={run}>
 							一键运行闭环
+						</Button>
+						<Button loading={seedLoading} onClick={seed}>
+							导入演示数据
 						</Button>
 					</Space>
 				</Space>
