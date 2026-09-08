@@ -10,6 +10,7 @@ import {
 	Row,
 	Space,
 	Tag,
+	Timeline,
 	Typography,
 	message,
 } from "antd";
@@ -25,7 +26,7 @@ import {
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
-import type { ClosedLoopResult } from "../services/api";
+import type { ClosedLoopResult, DecisionRun } from "../services/api";
 
 const { Title, Text } = Typography;
 
@@ -53,6 +54,11 @@ export default function ClosedLoop() {
 	const [collect, setCollect] = useState(false);
 	const [seedLoading, setSeedLoading] = useState(false);
 	const [stats, setStats] = useState({ sources: 0, pending: 0, entities: 0, relations: 0, reports: 0, health: 0, objects: 0, kos: 0 });
+	const [decisions, setDecisions] = useState<DecisionRun[]>([]);
+
+	const loadDecisions = async () => {
+		try { const d = await api.listDecisions(10); setDecisions(d.runs || []); } catch { /* 忽略 */ }
+	};
 
 	useEffect(() => {
 		api.listSources().then((d) => setStats((s) => ({ ...s, sources: d.total }))).catch(() => {});
@@ -60,6 +66,7 @@ export default function ClosedLoop() {
 		api.listKnowledgeGraph().then((d) => setStats((s) => ({ ...s, entities: d.entity_count, relations: d.relation_count }))).catch(() => {});
 		api.listInsights(1).then((d) => setStats((s) => ({ ...s, reports: d.total }))).catch(() => {});
 		api.getKnowledgeHealth().then((h) => setStats((s) => ({ ...s, health: h.health_score }))).catch(() => {});
+		loadDecisions();
 	}, []);
 
 	const statusOf = (name: string): string => {
@@ -79,6 +86,7 @@ export default function ClosedLoop() {
 		try {
 			setResult(await api.runClosedLoop(collect));
 			message.success("智能闭环执行完成");
+			await loadDecisions();
 		} catch (e) {
 			message.error(`闭环执行失败：${(e as Error)?.message || "请配置模型 API Key"}`);
 		} finally {
@@ -167,6 +175,28 @@ export default function ClosedLoop() {
 						);
 					})}
 				</>
+			)}
+
+			{decisions.length > 0 && (
+				<Card title="Agent 决策时间线" style={{ marginTop: 16 }}>
+					<Timeline
+						items={decisions.flatMap((r) =>
+							r.entries.map((e) => ({
+								color: e.status === "error" ? "red" : e.status === "partial" ? "orange" : "blue",
+								children: (
+									<div>
+										<Space wrap>
+											<Tag color="geekblue">{e.agent}</Tag>
+											<Text strong>{e.decision}</Text>
+											<Tag color={e.status === "ok" ? "green" : e.status === "partial" ? "orange" : "red"}>{e.status}</Tag>
+										</Space>
+										<div style={{ color: "#999", fontSize: 12 }}>{e.detail}</div>
+									</div>
+								),
+							})),
+						)}
+					/>
+				</Card>
 			)}
 		</div>
 	);

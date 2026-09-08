@@ -1207,6 +1207,10 @@ class APIService {
 		return this.request(`/api/v1/closed-loop/run?collect=${collect}`, { method: "POST" });
 	}
 
+	async listDecisions(limit = 10): Promise<{ runs: DecisionRun[]; total: number }> {
+		return this.request(`/api/v1/agents/decisions?limit=${limit}`);
+	}
+
 	// 一键导入演示数据 (A2)
 	async seedDemo(): Promise<{ created: number; skipped: number }> {
 		return this.request(`/api/v1/demo/seed`, { method: "POST" });
@@ -1417,6 +1421,20 @@ export interface ClosedLoopResult {
 	stages: ClosedLoopStage[];
 	summary: string;
 	status: string;
+}
+
+export interface DecisionEntry {
+	agent: string;
+	decision: string;
+	detail?: string | null;
+	status: string;
+	created_at?: string;
+}
+
+export interface DecisionRun {
+	run_id: string;
+	created_at?: string;
+	entries: DecisionEntry[];
 }
 
 export interface AskResponse {

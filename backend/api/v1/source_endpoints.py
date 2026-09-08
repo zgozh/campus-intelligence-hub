@@ -34,6 +34,7 @@ from models import (
     CollectionJob,
     Conflict,
     Digest,
+    DecisionLog,
     InsightReport,
     KnowledgeObject,
     Notification,
@@ -824,6 +825,41 @@ async def run_closed_loop_endpoint(
 ):
     """一键智能运营闭环：采集 Agent → 知识治理 Agent → 问答/运营 Agent。"""
     return await run_closed_loop(db, collect=collect)
+
+
+@router.get("/agents/decisions")
+async def list_decisions(
+    limit: int = 10,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Agent 决策日志（可视化时间线）：按运行分组返回每层决策。"""
+    run_ids = (
+        await db.execute(
+            select(DecisionLog.run_id)
+            .group_by(DecisionLog.run_id)
+            .order_by(func.max(DecisionLog.created_at).desc())
+            .limit(limit)
+        )
+    ).scalars().all()
+    runs = []
+    for rid in run_ids:
+        entries = (
+            await db.execute(
+                select(DecisionLog).where(DecisionLog.run_id == rid).order_by(DecisionLog.created_at)
+            )
+        ).scalars().all()
+        runs.append(
+            {
+                "run_id": rid,
+                "created_at": entries[0].created_at if entries else None,
+                "entries": [
+                    {"agent": e.agent, "decision": e.decision, "detail": e.detail, "status": e.status, "created_at": e.created_at}
+                    for e in entries
+                ],
+            }
+        )
+    return {"runs": runs, "total": len(runs)}
 
 
 @router.post("/demo/seed")

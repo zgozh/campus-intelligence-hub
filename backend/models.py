@@ -888,3 +888,19 @@ class Notification(Base):
     content = Column(Text, nullable=True)  # markdown 摘要
     read = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class DecisionLog(Base):
+    """Agent 决策日志（可视化时间线）：三层闭环每层 Agent 的决策记录。"""
+
+    __tablename__ = "decision_logs"
+
+    id = Column(
+        String(50), primary_key=True, default=lambda: f"dec_{uuid.uuid4().hex[:12]}"
+    )
+    run_id = Column(String(50), nullable=False, index=True)  # 一次闭环运行的决策分组
+    agent = Column(String(50), nullable=False)  # 采集/知识治理/问答运营/…
+    decision = Column(String(200), nullable=False)  # 简短决策
+    detail = Column(Text, nullable=True)  # 说明
+    status = Column(String(20), nullable=False, default="ok")  # ok/partial/error/skip
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
