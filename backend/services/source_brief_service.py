@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from agents.llm import ask_llm
 from models import BriefReport, ChangeEvent, KnowledgeObject
 from services.source_monitor import monitor_sources
+from services.text_utils import clean_title
 
 logger = logging.getLogger(__name__)
 
@@ -95,9 +96,9 @@ async def generate_source_brief(db, days: int = 7, persist: bool = False) -> dic
         logger.warning("校务快讯 LLM 调用异常（降级规则式）: %s", e)
         content = _rule_fallback(data)
 
-    out = {"content": content, "data": data}
+    out = {"content": content, "data": data, "title": clean_title(content)}
     if persist:
-        br = BriefReport(content=content, data=data)
+        br = BriefReport(content=content, data=data, title=clean_title(content))
         db.add(br)
         await db.commit()
         await db.refresh(br)

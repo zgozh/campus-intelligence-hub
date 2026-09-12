@@ -13,9 +13,11 @@ from models import Notification
 logger = logging.getLogger(__name__)
 
 
-async def create_notification(db, kind: str, title: str, content: str | None) -> Notification:
-    """写入站内通知（不 commit，交由调用方）。"""
-    n = Notification(kind=kind, title=title, content=content, read=False)
+async def create_notification(
+    db, kind: str, title: str, content: str | None, link: str | None = None
+) -> Notification:
+    """写入站内通知（不 commit，交由调用方）。link 为前端路由跳转目标（如 /insights）。"""
+    n = Notification(kind=kind, title=title, content=content, link=link, read=False)
     db.add(n)
     await db.flush()
     return n
@@ -39,9 +41,11 @@ async def webhook_notify(kind: str, title: str, content: str | None) -> bool:
         return False
 
 
-async def push_notification(db, kind: str, title: str, content: str | None) -> Notification:
-    """站内通知 + 外发 webhook；结束后 commit。"""
-    n = await create_notification(db, kind, title, content)
+async def push_notification(
+    db, kind: str, title: str, content: str | None, link: str | None = None
+) -> Notification:
+    """站内通知 + 外发 webhook；结束后 commit。既有调用方无需改动（link 可选）。"""
+    n = await create_notification(db, kind, title, content, link=link)
     await db.commit()
     if settings.campus_notify_webhook:
         # 不阻塞主流程

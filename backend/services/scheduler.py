@@ -535,7 +535,13 @@ class CampusBriefScheduler:
         try:
             async with AsyncSessionLocal() as db:
                 r = await generate_source_brief(db, days=7, persist=True)
-                await push_notification(db, "brief", "自动巡检 · 校务快讯（近 7 天）", r.get("content"))
+                await push_notification(
+                    db,
+                    "brief",
+                    "自动巡检 · 校务快讯（近 7 天）",
+                    r.get("content"),
+                    link="/sources",
+                )
                 await check_alerts(db)
                 logger.info("校务快讯+告警巡检生成：%s", r.get("id"))
         except Exception as e:

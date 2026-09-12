@@ -9,8 +9,9 @@ import tempfile
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.endpoints.auth import get_current_admin
@@ -104,7 +105,9 @@ async def generate_brief_endpoint(
 ):
     """一键生成校务快讯（自动化巡检：按来源/部门汇总近 N 天新增内容 + 变更 + 临期）。"""
     brief = await generate_source_brief(db, days=days, persist=True)
-    await push_notification(db, "brief", f"校务快讯（近 {days} 天）", brief["content"])
+    await push_notification(
+        db, "brief", f"校务快讯（近 {days} 天）", brief["content"], link="/sources"
+    )
     return brief
 
 
@@ -129,17 +132,32 @@ async def list_brief_endpoint(
 async def list_notifications(
     limit: int = 20,
     unread_only: bool = False,
+    kind: str | None = None,
     current_user: AdminUser = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """通知列表（未读优先 + 时间倒序）。"""
-    q = select(Notification).order_by(Notification.read.asc(), Notification.created_at.desc()).limit(limit)
+    """通知列表（未读优先 + 时间倒序；可按 kind 分类过滤）。"""
+    q = select(Notification)
     if unread_only:
-        q = select(Notification).where(Notification.read == False).order_by(Notification.created_at.desc()).limit(limit)  # noqa: E712
+        q = q.where(Notification.read == False)  # noqa: E712
+    if kind:
+        q = q.where(Notification.kind == kind)
+    if unread_only:
+        q = q.order_by(Notification.created_at.desc()).limit(limit)
+    else:
+        q = q.order_by(Notification.read.asc(), Notification.created_at.desc()).limit(limit)
     rows = (await db.execute(q)).scalars().all()
     return {
         "notifications": [
-            {"id": n.id, "kind": n.kind, "title": n.title, "content": n.content, "read": n.read, "created_at": n.created_at}
+            {
+                "id": n.id,
+                "kind": n.kind,
+                "title": n.title,
+                "content": n.content,
+                "read": n.read,
+                "link": n.link,
+                "created_at": n.created_at,
+            }
             for n in rows
         ],
         "total": len(rows),
@@ -153,6 +171,19 @@ async def unread_count(
 ):
     unread = await db.scalar(select(func.count(Notification.id)).where(Notification.read == False))  # noqa: E712
     return {"unread": int(unread or 0)}
+
+
+@router.post("/notifications/read-all")
+async def mark_all_read(
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """全部标记已读（幂等：无未读时返回 updated=0）。"""
+    result = await db.execute(
+        update(Notification).where(Notification.read == False).values(read=True)  # noqa: E712
+    )
+    await db.commit()
+    return {"updated": int(result.rowcount or 0)}
 
 
 @router.post("/notifications/{notification_id}/read")
@@ -345,17 +376,51 @@ async def run_source(
     db: AsyncSession = Depends(get_db),
     max_pages: int = 1,
     column: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+    only_new: bool = False,
+    max_items: int = 200,
 ):
+    """手动触发采集（REFACTOR_PLAN_V2 T5）。
+
+    新增可选参数：栏目 column、发布时间范围 since/until（YYYY-MM-DD）、
+    only_new（仅采集晚于上次成功水位的新内容）、max_items（单次入库上限，硬上限 500）。
+    全部缺省时行为与历史版本一致（向后兼容）。
+    """
     source = await db.get(Source, source_id)
     if not source:
         raise HTTPException(status_code=404, detail="数据源不存在")
 
-    params = {"trigger": "manual", "max_pages": max_pages}
+    # 互斥：同一数据源同时只允许一个未完成任务，避免重复点击产生并发采集
+    running_job = (
+        await db.execute(
+            select(CollectionJob.id)
+            .where(
+                CollectionJob.source_id == source_id,
+                CollectionJob.status.in_(("PENDING", "RUNNING")),
+            )
+            .limit(1)
+        )
+    ).scalar()
+    if running_job:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": "该数据源已有进行中的采集任务", "job_id": str(running_job)},
+        )
+
+    params = {"trigger": "manual", "max_pages": max_pages, "max_items": max_items}
     if column:
         params["column"] = column
+    if since:
+        params["since"] = since
+    if until:
+        params["until"] = until
+    if only_new:
+        params["only_new"] = True
     job = CollectionJob(source_id=source_id, status="PENDING", params=params)
     db.add(job)
-    source.last_crawled_at = datetime.now(timezone.utc)
+    # 注意：source.last_crawled_at 的写入已收敛到 collection_service.run_collection
+    # （端点/闭环/调度三条链路共用，保证"最近采集时间"语义唯一）
     await db.commit()
     await db.refresh(job)
 
@@ -881,7 +946,9 @@ async def generate_insights_endpoint(
 ):
     """AI 校务洞察：基于运营数据（新增/变更/冲突/审核/来源/临期）由 LLM 生成并落盘。"""
     ins = await generate_insight(db, persist=True)
-    await push_notification(db, "insight", "AI 校务洞察", ins.get("content"))
+    await push_notification(
+        db, "insight", ins.get("title") or "AI 校务洞察", ins.get("content"), link="/insights"
+    )
     return ins
 
 

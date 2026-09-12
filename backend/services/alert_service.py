@@ -60,7 +60,15 @@ async def check_alerts(db) -> dict:
     for a in alerts:
         if await _has_unread(db, a["title"]):
             continue
-        db.add(Notification(kind="alert", title=a["title"], content=a["detail"], read=False))
+        db.add(
+            Notification(
+                kind="alert",
+                title=a["title"],
+                content=a["detail"],
+                link="/notifications",
+                read=False,
+            )
+        )
         created += 1
     await db.commit()
     logger.info("告警巡检：%d 项告警（新建 %d 通知）", len(alerts), created)

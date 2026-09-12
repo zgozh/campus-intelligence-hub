@@ -9,6 +9,11 @@ from collectors.gzhu_cms import GUZhuCMSAdapter
 
 class GUZhuAdapter(GUZhuCMSAdapter):
     site = "gzhu"
+    # 已知栏目映射（栏目名 → 列表页路径片段）：命中即用，保证既有"通知公告"数据语义不变
+    declared_columns = {
+        "通知公告": "/z__l/tzgg",
+    }
+    default_column = "通知公告"
 
     def _abs_url(self, base_url: str, href: str) -> str:
         """gzhu 列表页位于 /z__l/ 等目录，但文章 href 以站点根 /info/ 起步，必须拼到域名根。"""
@@ -19,6 +24,7 @@ class GUZhuAdapter(GUZhuCMSAdapter):
 
     def parse_list(self, html: str, base_url: str) -> list[ArticleRef]:
         tree = HTMLParser(html)
+        column = self.column_for_list_page(html, base_url)
         refs: list[ArticleRef] = []
         for li in tree.css("li"):
             a = li.css_first("a[href]")
@@ -29,6 +35,7 @@ class GUZhuAdapter(GUZhuCMSAdapter):
                 url=self._abs_url(base_url, a.attributes["href"]),
                 title=a.attributes.get("title") or self._text(a),
                 publish_date=self._text(date_node) if date_node else None,
+                column=column,
             ))
         return refs
 
@@ -45,5 +52,6 @@ class GUZhuAdapter(GUZhuCMSAdapter):
             html=html,
             publish_date=m.group(1) if m else ref.publish_date,
             source_site=self.site,
-            column="通知公告",
+            # 栏目来自列表页推导（不再写死），保证"可选的栏目"与"能筛到的数据"同源
+            column=ref.column or self.default_column,
         )

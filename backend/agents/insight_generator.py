@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 
 from agents.llm import ask_llm
 from models import ChangeEvent, Conflict, InsightReport, KnowledgeObject, ReviewTask, Source
+from services.text_utils import clean_title
 
 logger = logging.getLogger(__name__)
 
@@ -116,9 +117,9 @@ async def generate_insight(db, persist: bool = False) -> dict:
         logger.warning("洞察生成 LLM 调用异常（降级规则式）: %s", e)
         content = _rule_fallback(data)
 
-    result = {"content": content, "data": data}
+    result = {"content": content, "data": data, "title": clean_title(content)}
     if persist:
-        report = InsightReport(content=content, data=data)
+        report = InsightReport(content=content, data=data, title=clean_title(content))
         db.add(report)
         await db.commit()
         await db.refresh(report)

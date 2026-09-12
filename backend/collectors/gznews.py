@@ -9,9 +9,13 @@ from collectors.gzhu_cms import GUZhuCMSAdapter
 
 class GUNewsAdapter(GUZhuCMSAdapter):
     site = "gznews"
+    # 新闻网：首页/频道页均可解析，具体栏目由列表页自身推导，兜底保持历史值
+    declared_columns: dict[str, str] = {}
+    default_column = "新闻动态"
 
     def parse_list(self, html: str, base_url: str) -> list[ArticleRef]:
         tree = HTMLParser(html)
+        column = self.column_for_list_page(html, base_url)
         refs: list[ArticleRef] = []
         for li in tree.css("ul li"):
             a = li.css_first("a[href]")
@@ -22,6 +26,7 @@ class GUNewsAdapter(GUZhuCMSAdapter):
                 url=self._abs_url(base_url, a.attributes["href"]),
                 title=a.attributes.get("title") or self._text(a),
                 publish_date=self._text(date_node) if date_node else None,
+                column=column,
             ))
         return refs
 
@@ -37,5 +42,5 @@ class GUNewsAdapter(GUZhuCMSAdapter):
             html=html,
             publish_date=m.group(1) if m else ref.publish_date,
             source_site=self.site,
-            column="新闻动态",
+            column=ref.column or self.default_column,
         )
