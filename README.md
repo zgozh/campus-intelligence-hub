@@ -28,7 +28,8 @@
 - **知识图谱**：LLM 三元组抽取 / **力导向可视化**（缩放/拖拽/节点点击/类型筛选）/ **关系路径问答 GraphRAG**（返回子图）/ 生命周期一致（新增/删除自动同步）。
 - **可信问答**：融合评分检索 + **gte-rerank-v2 精排** + 意图/部门路由 + GraphRAG 线索 + **证据引用** + **Answer Guard 防幻觉拒答**。
 - **校务洞察**：LLM 日报/周报 / 趋势·风险·建议 / **自动定时推送**。
-- **Agent 能力**：三层 Agent 智能闭环（采集 → 知识治理 → 问答/运营）/ **AI 智能体中心**（6 个 Agent 能力矩阵 + 实时状态）。
+- **Agent 能力**：三层 Agent 智能闭环（采集 → 知识治理 → 问答/运营）/ **AI 智能体中心**（6 个 Agent 能力矩阵 + 实时状态）/ **运行配置面板**（参数 Schema 驱动，可就地调整采集范围/时间/栏目与治理·运营开关）/ **实时流式决策时间线**（每步完成即出现，右侧显示完成时刻与耗时，支持历史回放）。
+- **自动化运维**：数据源监控（最近成功采集时间 / 近 7 天新增 / 失败原因）/ **巡检告警** / **校务快讯** / **站内通知中心**（分类筛选 + 一键全部已读 + 点击跳转）。
 - **对外开放**：REST + **MCP 工具**（campus_search/source/knowledge/changes/review/insight/closed_loop，共 7 个）。
 
 ---
@@ -160,7 +161,20 @@ docker-compose.yml   一键编排（backend/frontend/qdrant/postgres/redis/scrap
 
 ## 对外开放接口
 
-**REST**：`/api/v1/sources`、`/knowledge-objects`、`/knowledge-graph`、`/ask`、`/insights`、`/closed-loop/run`、`/review-tasks/*` 等。
+**REST**：`/api/v1/sources`、`/knowledge-objects`、`/knowledge-graph`、`/ask`、`/insights`、`/review-tasks/*` 等。
+
+**本轮新增（交互流式化 + 参数可配置化）**：
+
+| 端点 | 说明 |
+| --- | --- |
+| `POST /api/v1/closed-loop/stream` | **SSE 流式**运行智能运营闭环（配置体经 Schema 校验），逐阶段推送事件；旧同步端点 `POST /closed-loop/run` 保留不变 |
+| `GET /api/v1/closed-loop/runs`、`GET /closed-loop/runs/{run_id}` | 运行历史（含参数快照）与**回放**（事件序列与实时流同构） |
+| `POST /api/v1/closed-loop/runs/{run_id}/cancel` | 协作式取消（阶段之间生效） |
+| `GET /api/v1/config-schema/{closed-loop\|collection}` | 闭环/采集参数 Schema（类型/默认值/范围/联动），前端据此动态渲染配置面板 |
+| `GET /api/v1/sources/{id}/columns` | 栏目动态发现（历史分布计数 + 适配器声明，TTL 300s 缓存） |
+| `POST /api/v1/sources/{id}/run` | 新增可选参数 `since`/`until`/`only_new`/`max_items`（缺省行为不变）；同源并发采集返回 409 |
+| `GET /api/v1/sources/monitor` | 新增 `last_success_at`/`last_error`/`refreshed_at`（并消除逐源 N+1 查询） |
+| `POST /api/v1/notifications/read-all` | 全部标记已读（幂等）；通知项新增 `link` 跳转目标，列表支持 `kind` 过滤 |
 
 **MCP（JSON-RPC over HTTP, `POST /api/mcp`）**：`campus_search` / `campus_source` / `campus_knowledge` / `campus_changes` / `campus_review` / `campus_insight` / `campus_closed_loop`（共 7 个）。
 
