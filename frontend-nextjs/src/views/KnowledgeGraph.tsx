@@ -12,6 +12,8 @@ const { Title, Text } = Typography;
 
 interface BuildInfo { ko_count: number; relations_added: number; skipped: number; elapsed: string; }
 type Entity = KnowledgeGraph['entities'][number];
+// 图谱问答后端可能新增的字段（接口类型尚未声明，按可选补充）
+type KGAskView = KGAskResult & { intent?: string; department?: string };
 
 const entityColor: Record<string, string> = {
   部门: 'blue', 政策: 'purple', 事件: 'cyan', 对象: 'green', 时间: 'orange', 文件: 'magenta',
@@ -22,7 +24,7 @@ export default function KnowledgeGraphPage() {
   const [loading, setLoading] = useState(false);
   const [building, setBuilding] = useState(false);
   const [query, setQuery] = useState('');
-  const [asked, setAsked] = useState<KGAskResult | null>(null);
+  const [asked, setAsked] = useState<KGAskView | null>(null);
   const [askLoading, setAskLoading] = useState(false);
   const [buildInfo, setBuildInfo] = useState<BuildInfo | null>(null);
   const [buildStage, setBuildStage] = useState(-1);
@@ -148,9 +150,9 @@ export default function KnowledgeGraphPage() {
                   entities={asked.subgraph.nodes}
                   relations={asked.subgraph.edges.map((e, i) => ({ id: `sg${i}`, ...e }))}
                 />
-                {asked.paths?.length > 0 && (
+                {(asked.paths?.length ?? 0) > 0 && (
                   <div style={{ marginTop: 10, borderTop: '1px solid #f0f0f0', paddingTop: 8 }}>
-                    {asked.paths.map((p, i) => (
+                    {(asked.paths || []).map((p, i) => (
                       <div key={i} style={{ fontSize: 12, color: '#666', lineHeight: 1.9 }}>· {p}</div>
                     ))}
                   </div>

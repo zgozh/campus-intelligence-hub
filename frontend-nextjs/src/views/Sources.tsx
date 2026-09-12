@@ -1,13 +1,69 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Button, Card, Form, Input, Modal, Popconfirm, Radio, Select, Space, Table, Tag, Typography, message } from 'antd';
-import { CompassOutlined, PlusOutlined } from '@ant-design/icons';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import type { ComponentProps, ReactElement } from 'react';
+import { Button, Card, Checkbox, DatePicker, Form, Input, InputNumber, Modal, Popconfirm, Radio, Select, Space, Table, Tag, Tooltip, Typography, message } from 'antd';
+import { CompassOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { api } from '../services/api';
-import type { BriefResult, CampusSource, RecommendResult, SourceMonitor } from '../services/api';
+import type { BriefResult, CampusSource, RecommendResult, SourceColumn, SourceMonitor } from '../services/api';
 import DashboardMarkdown from '../components/DashboardMarkdown';
+import { displayTitle, formatDateTime, formatTime } from '../utils/format';
 
 const { Title } = Typography;
+
+/** 监控项（last_success_at / last_error 由后端快照提供，展示层据此统一"最近采集"语义） */
+type MonitorItem = SourceMonitor['items'][number];
+
+/** 本地日期 → YYYY-MM-DD（用本地时区，避免 toISOString 的 UTC 偏移算错一天） */
+function toDateStr(d: Date): string {
+  const pad = (n: number) => (n < 10 ? `0${n}` : String(n));
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** 今天往前 offset 天（offset=0 即今天） */
+function daysAgo(offset: number): Date {
+  const d = new Date();
+  d.setDate(d.getDate() - offset);
+  return d;
+}
+
+/** 时间筛选档位（T13-2）：近 7 天 = 今天往前 6 天到今天（含首尾，共 7 天） */
+type TimeRangeKey = 'all' | '7d' | '30d' | 'custom';
+
+const TIME_RANGE_OPTIONS: { value: TimeRangeKey; label: string }[] = [
+  { value: 'all', label: '不限' },
+  { value: '7d', label: '近 7 天' },
+  { value: '30d', label: '近 30 天' },
+  { value: 'custom', label: '自定义' },
+];
+
+/** 复用 antd RangePicker 的 value 类型，无需额外引第三方日期库 */
+type RangePickerValue = ComponentProps<typeof DatePicker.RangePicker>['value'];
+
+/**
+ * 最近采集时间的统一展示（T13-6）：优先成功时间，其次最近抓取时间；
+ * 两者都无显示「尚未采集」；有 last_error 时附红标提示失败原因。
+ * 监控卡片与数据源表格共用本组件，保证两处时间一致。
+ */
+function CollectedAt({ item, prefix = '' }: { item: Pick<MonitorItem, 'last_success_at' | 'last_crawled_at' | 'last_error'>; prefix?: string }): ReactElement {
+  const at = formatDateTime(item.last_success_at || item.last_crawled_at);
+  return (
+    <Space size={4}>
+      <span>{at ? `${prefix}${at}` : '尚未采集'}</span>
+      {item.last_error ? (
+        <Tooltip title={item.last_error}>
+          <Tag color="red" style={{ marginInlineEnd: 0 }}>失败</Tag>
+        </Tooltip>
+      ) : null}
+    </Space>
+  );
+}
+
+/** 监控项里的近期标题（LLM/站点原始标题）统一清洗后再展示 */
+function recentTitlesLabel(titles: string[]): string {
+  if (!titles.length) return '近 7 天暂无新内容';
+  return titles.slice(0, 2).map((t) => displayTitle(t, 30)).join(' / ');
+}
 
 const statusColor: Record<string, string> = {
   active: 'green',
@@ -21,14 +77,6 @@ const PAGE_OPTIONS = [
   { value: 5, label: '5 页' },
   { value: 10, label: '10 页' },
   { value: 0, label: '全部（最多 50 页）' },
-];
-
-const COLUMN_OPTIONS = [
-  { value: '', label: '全部内容' },
-  { value: '通知公告', label: '通知公告' },
-  { value: '新闻动态', label: '新闻动态' },
-  { value: '办事指南', label: '办事指南' },
-  { value: '规章制度', label: '规章制度' },
 ];
 
 const valueColor: Record<string, string> = { high: 'red', medium: 'orange', low: 'default' };
@@ -57,16 +105,36 @@ export default function Sources() {
   const [monitorLoading, setMonitorLoading] = useState(false);
   const [brief, setBrief] = useState<BriefResult | null>(null);
   const [briefLoading, setBriefLoading] = useState(false);
-  const loadMonitor = useCallback(async () => {
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const d = await api.listSources();
+      setSources(d.sources || []);
+    } catch (e) {
+      message.error('加载数据源失败');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadMonitor = useCallback(async (options?: { notify?: boolean }) => {
     setMonitorLoading(true);
     try {
-      setMonitor(await api.monitorSources(7));
+      const snapshot = await api.monitorSources(7);
+      setMonitor(snapshot);
+      if (options?.notify) {
+        const stamp = formatTime(snapshot.refreshed_at) || formatTime(new Date().toISOString());
+        message.success(`已更新 · ${stamp}`);
+        await load();
+      }
     } catch (e) {
       message.error('监控加载失败');
     } finally {
       setMonitorLoading(false);
     }
-  }, []);
+  }, [load]);
+
   const genBrief = async () => {
     setBriefLoading(true);
     try {
@@ -85,6 +153,15 @@ export default function Sources() {
   const [runMaxPages, setRunMaxPages] = useState(1);
   const [runColumn, setRunColumn] = useState('');
   const [runLoading, setRunLoading] = useState(false);
+  // 栏目动态发现（T13-1）
+  const [runColumns, setRunColumns] = useState<SourceColumn[]>([]);
+  const [columnLoading, setColumnLoading] = useState(false);
+  const [columnError, setColumnError] = useState('');
+  // 时间筛选（T13-2）与仅采新内容（T13-3）
+  const [runTimeRange, setRunTimeRange] = useState<TimeRangeKey>('all');
+  const [runCustomRange, setRunCustomRange] = useState<RangePickerValue>(null);
+  const [runOnlyNew, setRunOnlyNew] = useState(false);
+  const [runMaxItems, setRunMaxItems] = useState<number | null>(null);
 
   // 自动发现
   const [discoverOpen, setDiscoverOpen] = useState(false);
@@ -92,18 +169,6 @@ export default function Sources() {
   const [discoverLoading, setDiscoverLoading] = useState(false);
   const [discovered, setDiscovered] = useState<RecommendResult['recommended']>([]);
   const [discoveredOrigin, setDiscoveredOrigin] = useState('');
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const d = await api.listSources();
-      setSources(d.sources || []);
-    } catch (e) {
-      message.error('加载数据源失败');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
     load();
@@ -123,18 +188,90 @@ export default function Sources() {
     }
   };
 
+  /** 栏目动态发现：加载中显示 loading，失败或空列表回退「全部内容」并给出可见提示 */
+  const loadColumns = useCallback(async (sourceId: string, refresh = false) => {
+    setColumnLoading(true);
+    setColumnError('');
+    try {
+      const d = await api.listSourceColumns(sourceId, refresh);
+      const cols = d.columns || [];
+      setRunColumns(cols);
+      if (cols.length === 0) {
+        setColumnError('该数据源暂未发现可选栏目，已回退为「全部内容」（可点「刷新栏目」重试）');
+      }
+    } catch (e) {
+      setRunColumns([]);
+      setColumnError('栏目加载失败，已回退为「全部内容」（可点「刷新栏目」重试）');
+    } finally {
+      setColumnLoading(false);
+    }
+  }, []);
+
+  /** 栏目下拉选项：始终保留「全部内容」，适配器声明但未采到内容的栏目加注说明 */
+  const columnOptions = useMemo(
+    () => [
+      { value: '', label: '全部内容' },
+      ...runColumns.map((c) => ({
+        value: c.value,
+        label: c.origin === 'adapter' && c.count === 0 ? `${c.label}（暂未采集到内容）` : c.label,
+      })),
+    ],
+    [runColumns],
+  );
+
+  /** 时间筛选折算结果（弹窗内预览与实际请求参数同源） */
+  const runRange = useMemo<{ since?: string; until?: string }>(() => {
+    if (runTimeRange === '7d') return { since: toDateStr(daysAgo(6)), until: toDateStr(daysAgo(0)) };
+    if (runTimeRange === '30d') return { since: toDateStr(daysAgo(29)), until: toDateStr(daysAgo(0)) };
+    if (runTimeRange === 'custom') {
+      const start = runCustomRange?.[0]?.format('YYYY-MM-DD');
+      const end = runCustomRange?.[1]?.format('YYYY-MM-DD');
+      return { since: start || undefined, until: end || undefined };
+    }
+    return { since: undefined, until: undefined };
+  }, [runTimeRange, runCustomRange]);
+
+  const rangePreview = runRange.since && runRange.until
+    ? `将按 ${runRange.since} ~ ${runRange.until} 过滤（按发布时间）`
+    : runTimeRange === 'custom'
+      ? '请选择完整的开始与结束日期（格式 YYYY-MM-DD）'
+      : '不限时间：将采集该栏目当前可见的全部内容';
+
   const openRun = (record: CampusSource) => {
     setRunSource(record);
     setRunMaxPages(1);
     setRunColumn('');
+    setRunTimeRange('all');
+    setRunCustomRange(null);
+    setRunOnlyNew(false);
+    setRunMaxItems(null);
+    setRunColumns([]);
+    setColumnError('');
     setRunOpen(true);
+    void loadColumns(record.id);
   };
 
   const confirmRun = async () => {
     if (!runSource) return;
+    // 基本校验：自定义区间必须完整且 since <= until
+    if (runTimeRange === 'custom') {
+      if (!runRange.since || !runRange.until) {
+        message.warning('请选择完整的自定义时间区间');
+        return;
+      }
+      if (runRange.since > runRange.until) {
+        message.warning('开始日期不能晚于结束日期');
+        return;
+      }
+    }
     setRunLoading(true);
     try {
-      const r = await api.runSource(runSource.id, runMaxPages, runColumn || undefined);
+      const r = await api.runSource(runSource.id, runMaxPages, runColumn || undefined, {
+        since: runRange.since,
+        until: runRange.until,
+        onlyNew: runOnlyNew,
+        ...(runMaxItems !== null ? { maxItems: runMaxItems } : {}),
+      });
       message.success(`已开始采集，任务 ${r.job_id}`);
       setRunOpen(false);
     } catch (e) {
@@ -192,10 +329,11 @@ export default function Sources() {
       render: (s: string) => <Tag color={statusColor[s] || 'default'}>{s}</Tag>,
     },
     {
-      title: '上次采集',
-      dataIndex: 'last_crawled_at',
-      width: 170,
-      render: (v: string | null) => (v ? new Date(v).toLocaleString() : '-'),
+      // 与监控卡片统一：last_success_at ?? last_crawled_at（T13-6）
+      title: '最近采集',
+      key: 'last_collected',
+      width: 200,
+      render: (_: unknown, record: CampusSource) => <CollectedAt item={record} />,
     },
     {
       title: '操作',
@@ -246,7 +384,7 @@ export default function Sources() {
         extra={
           <Space size={8}>
             <Button size="small" loading={briefLoading} onClick={genBrief}>一键生成校务快讯</Button>
-            <Button size="small" loading={monitorLoading} onClick={loadMonitor}>刷新监控</Button>
+            <Button size="small" loading={monitorLoading} onClick={() => loadMonitor({ notify: true })}>刷新监控</Button>
           </Space>
         }
       >
@@ -257,10 +395,10 @@ export default function Sources() {
                 <Tag color={m.new_count > 0 ? 'red' : 'default'}>{m.new_count} 条新增</Tag>
                 <span style={{ fontWeight: 600, width: 160 }}>{m.name}</span>
                 <span style={{ flex: 1, color: '#888', fontSize: 12 }}>
-                  {m.recent_titles.length > 0 ? m.recent_titles.slice(0, 2).join(' / ') : '近 7 天暂无新内容'}
+                  {recentTitlesLabel(m.recent_titles)}
                 </span>
                 <span style={{ color: '#999', fontSize: 12, whiteSpace: 'nowrap' }}>
-                  {m.last_crawled_at ? `最近采集 ${new Date(m.last_crawled_at).toLocaleString()}` : '尚未采集'}
+                  <CollectedAt item={m} prefix="最近采集 " />
                 </span>
               </div>
             ))}
@@ -359,7 +497,80 @@ export default function Sources() {
         </div>
         <div style={{ marginBottom: 20 }}>
           <div style={{ marginBottom: 8, fontWeight: 600 }}>采集内容筛选（栏目）</div>
-          <Select style={{ width: '100%' }} value={runColumn} onChange={setRunColumn} options={COLUMN_OPTIONS} />
+          <Space.Compact style={{ width: '100%' }}>
+            <Select
+              style={{ width: '100%' }}
+              value={runColumn}
+              onChange={setRunColumn}
+              options={columnOptions}
+              loading={columnLoading}
+              placeholder="全部内容"
+            />
+            <Button
+              icon={<ReloadOutlined />}
+              loading={columnLoading}
+              onClick={() => { if (runSource) void loadColumns(runSource.id, true); }}
+            >
+              刷新栏目
+            </Button>
+          </Space.Compact>
+          <div style={{ marginTop: 4, fontSize: 12, color: '#888' }}>
+            栏目清单来自该数据源的真实采集分布，括号内为已采集条数。
+          </div>
+          {columnError && (
+            <Typography.Text type="warning" style={{ fontSize: 12 }}>{columnError}</Typography.Text>
+          )}
+        </div>
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ marginBottom: 8, fontWeight: 600 }}>发布时间筛选</div>
+          <Radio.Group
+            options={TIME_RANGE_OPTIONS}
+            value={runTimeRange}
+            onChange={(e) => setRunTimeRange(e.target.value as TimeRangeKey)}
+            optionType="button"
+            buttonStyle="solid"
+          />
+          {runTimeRange === 'custom' && (
+            <div style={{ marginTop: 8 }}>
+              <DatePicker.RangePicker
+                format="YYYY-MM-DD"
+                value={runCustomRange}
+                onChange={(dates) => setRunCustomRange(dates)}
+                style={{ width: '100%' }}
+              />
+            </div>
+          )}
+          <div style={{ marginTop: 8, fontSize: 12, color: '#888' }}>
+            近 7 天 = 今天往前 6 天到今天（含首尾）；只采发布时间落在区间内的内容。
+          </div>
+          <div style={{ marginTop: 6, padding: '6px 10px', background: '#f6ffed', borderRadius: 6, fontSize: 12, color: '#389e0d' }}>
+            {rangePreview}
+          </div>
+        </div>
+        <div style={{ marginBottom: 20 }}>
+          <Checkbox
+            checked={runOnlyNew}
+            disabled={!runSource?.last_success_at}
+            onChange={(e) => setRunOnlyNew(e.target.checked)}
+          >
+            仅采集晚于上次成功采集的新内容
+          </Checkbox>
+          <div style={{ marginTop: 4, fontSize: 12, color: '#888' }}>
+            {runSource?.last_success_at
+              ? `上次成功采集：${formatDateTime(runSource.last_success_at)}`
+              : '该源尚无成功采集记录'}
+          </div>
+        </div>
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ marginBottom: 8, fontWeight: 600 }}>单次入库上限（可选）</div>
+          <InputNumber
+            min={1}
+            max={500}
+            value={runMaxItems}
+            onChange={(v) => setRunMaxItems(v ?? null)}
+            placeholder="默认由后端决定（200）"
+            style={{ width: 260 }}
+          />
         </div>
         <div style={{ padding: '10px 12px', background: '#f6ffed', borderRadius: 6, fontSize: 12, lineHeight: 1.7 }}>
           <b style={{ color: '#52c41a' }}>采集说明：</b>

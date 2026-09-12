@@ -5,6 +5,7 @@ import { Button, Card, List, Space, Typography, message } from 'antd';
 import { api } from '../services/api';
 import type { DigestItem } from '../services/api';
 import DashboardMarkdown from '../components/DashboardMarkdown';
+import { displayTitle, formatDateTime } from '../utils/format';
 
 const { Title } = Typography;
 
@@ -69,8 +70,8 @@ export default function Digests() {
                 }}
               >
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{d.title}</div>
-                  <div style={{ fontSize: 12, color: '#999' }}>{new Date(d.created_at).toLocaleString()}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{displayTitle(d.title, 40)}</div>
+                  <div style={{ fontSize: 12, color: '#999' }}>{formatDateTime(d.created_at)}</div>
                 </div>
               </List.Item>
             )}

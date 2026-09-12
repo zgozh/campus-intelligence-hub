@@ -17,13 +17,17 @@ import { BulbOutlined, ReloadOutlined } from "@ant-design/icons";
 import { api } from "../services/api";
 import type { InsightReportItem, InsightResult } from "../services/api";
 import DashboardMarkdown from "../components/DashboardMarkdown";
+import { displayTitle, formatDateTime } from "../utils/format";
 
 const { Title, Paragraph } = Typography;
+
+// 历史报告条目：title 由后端生成（可能为 null，前端回退到正文首行清洗结果）
+type HistoryItem = InsightReportItem;
 
 export default function InsightsPage() {
 	const [result, setResult] = useState<InsightResult | null>(null);
 	const [loading, setLoading] = useState(false);
-	const [history, setHistory] = useState<InsightReportItem[]>([]);
+	const [history, setHistory] = useState<HistoryItem[]>([]);
 
 	useEffect(() => {
 		api
@@ -116,7 +120,7 @@ export default function InsightsPage() {
 					<Collapse
 						items={history.map((h) => ({
 							key: h.id || String(Math.random()),
-							label: `${h.created_at || ""} · ${h.content.split("\n")[0]?.slice(0, 40) || "洞察"}`,
+							label: `${formatDateTime(h.created_at)} · ${h.title || displayTitle(h.content?.split("\n")[0], 40)}`,
 							children: (
 								<DashboardMarkdown content={h.content} />
 							),

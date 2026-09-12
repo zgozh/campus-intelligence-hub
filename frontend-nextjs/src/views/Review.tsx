@@ -127,7 +127,7 @@ export default function Review() {
                 type="warning"
                 showIcon
                 message="风险提示"
-                description={suggest.risks.join('；')}
+                description={(suggest.risks || []).join('；')}
               />
             )}
             {suggest.reason && (

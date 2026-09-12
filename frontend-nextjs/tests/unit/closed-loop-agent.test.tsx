@@ -14,6 +14,14 @@ vi.mock("../../src/services/api", () => ({
     listInsights: vi.fn().mockResolvedValue({ reports: [], total: 4 }),
     getKnowledgeHealth: vi.fn().mockResolvedValue({ health_score: 80 }),
     runClosedLoop: vi.fn().mockResolvedValue({ stages: [], summary: "ok", status: "ok" }),
+    // T12 流式重构新增依赖（本文件只验证智能体中心渲染，故用空实现即可）
+    listDecisions: vi.fn().mockResolvedValue({ runs: [], total: 0 }),
+    listClosedLoopRuns: vi.fn().mockResolvedValue({ runs: [], total: 0 }),
+    getClosedLoopRun: vi.fn().mockResolvedValue({ run_id: "run_1", status: "ok", params: {}, events: [] }),
+    cancelClosedLoopRun: vi.fn().mockResolvedValue({ run_id: "run_1", cancel_requested: true }),
+    getConfigSchema: vi.fn().mockResolvedValue({ name: "closed_loop", version: 1, groups: [] }),
+    listSourceColumns: vi.fn().mockResolvedValue({ source_id: "src_1", columns: [], generated_at: "", cached: false }),
+    streamClosedLoop: vi.fn().mockResolvedValue({ run_id: "run_1", status: "ok" }),
   },
 }));
 

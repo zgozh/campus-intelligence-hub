@@ -1,32 +1,45 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Button, Card, Empty, List, Space, Tag, Typography, message } from "antd";
+import { Button, Card, Empty, List, Space, Tabs, Tag, Typography, message } from "antd";
 import { BellOutlined, CheckOutlined } from "@ant-design/icons";
+import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import type { NotificationItem } from "../services/api";
 import DashboardMarkdown from "../components/DashboardMarkdown";
+import { displayTitle, formatDateTime } from "../utils/format";
 
 const { Title, Text } = Typography;
 const KIND_ZH: Record<string, string> = { brief: "校务快讯", insight: "校务洞察", alert: "告警", expiring: "临期提醒", system: "系统" };
 
+/** 分类筛选：全部 + 后端支持的四类业务通知（T11-7） */
+const KIND_TABS: { key: string; label: string }[] = [
+  { key: "all", label: "全部" },
+  { key: "brief", label: "快讯" },
+  { key: "insight", label: "洞察" },
+  { key: "alert", label: "告警" },
+  { key: "system", label: "系统" },
+];
+
 export default function Notifications() {
+  const navigate = useNavigate();
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const [kind, setKind] = useState("all");
   const [alertLoading, setAlertLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const d = await api.listNotifications(50, unreadOnly);
+      const d = await api.listNotifications(50, unreadOnly, kind === "all" ? undefined : kind);
       setItems(d.notifications || []);
     } catch (e) {
       message.error("通知加载失败");
     } finally {
       setLoading(false);
     }
-  }, [unreadOnly]);
+  }, [unreadOnly, kind]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -43,14 +56,35 @@ export default function Notifications() {
     }
   };
 
+  /** 点击条目：先标记已读，有 link 则跳转对应页面 */
+  const openItem = async (n: NotificationItem) => {
+    try {
+      await api.markNotificationRead(n.id);
+    } catch (e) {
+      /* 标记失败不阻断跳转 */
+    }
+    setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
+    if (n.link) navigate(n.link);
+  };
+
   const done = async (id: string) => {
-    await api.markNotificationRead(id);
+    try {
+      await api.markNotificationRead(id);
+    } catch (e) {
+      message.error("标记已读失败");
+      return;
+    }
     await load();
   };
+
   const readAll = async () => {
-    for (const n of items.filter((x) => !x.read)) await api.markNotificationRead(n.id);
-    message.success("已全部标记已读");
-    await load();
+    try {
+      await api.readAllNotifications();
+      message.success("已全部标记已读");
+      await load();
+    } catch (e) {
+      message.error("全部已读失败");
+    }
   };
 
   return (
@@ -64,6 +98,14 @@ export default function Notifications() {
         </Space>
       </div>
 
+      <Tabs
+        size="small"
+        activeKey={kind}
+        onChange={setKind}
+        items={KIND_TABS.map((k) => ({ key: k.key, label: k.label }))}
+        style={{ marginBottom: 8 }}
+      />
+
       <Card loading={loading}>
         {items.length === 0 ? (
           <Empty description="暂无通知" />
@@ -72,18 +114,35 @@ export default function Notifications() {
             dataSource={items}
             renderItem={(n) => (
               <List.Item
+                onClick={() => { void openItem(n); }}
+                style={{ cursor: "pointer" }}
                 actions={
-                  !n.read ? [<Button key="r" size="small" type="link" icon={<CheckOutlined />} onClick={() => done(n.id)}>已读</Button>] : []
+                  !n.read
+                    ? [
+                        <Button
+                          key="r"
+                          size="small"
+                          type="link"
+                          icon={<CheckOutlined />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void done(n.id);
+                          }}
+                        >
+                          已读
+                        </Button>,
+                      ]
+                    : []
                 }
               >
                 <List.Item.Meta
                   title={
                     <span style={{ fontWeight: n.read ? 400 : 600 }}>
                       <Tag color={n.read ? "default" : "blue"}>{KIND_ZH[n.kind] || n.kind}</Tag>
-                      {n.title}
+                      {displayTitle(n.title, 40)}
                     </span>
                   }
-                  description={<Text type="secondary" style={{ fontSize: 12 }}>{new Date(n.created_at || "").toLocaleString()}</Text>}
+                  description={<Text type="secondary" style={{ fontSize: 12 }}>{formatDateTime(n.created_at)}</Text>}
                 />
                 {n.content && (
                   <div style={{ marginTop: 6, padding: "8px 12px", background: "#fafafa", borderRadius: 6, fontSize: 13 }}>

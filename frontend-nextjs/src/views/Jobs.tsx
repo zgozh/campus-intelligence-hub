@@ -13,11 +13,11 @@ const statusZh: Record<string, string> = { PENDING: '等待中', RUNNING: '采�
 const STAGES = ['Fetch', 'Parse', 'Clean', 'Classify', 'Dedup', 'Index'];
 const STAGE_ZH: Record<string, string> = { Fetch: '抓取', Parse: '解析', Clean: '清洗', Classify: '分类', Dedup: '去重', Index: '入库' };
 
-function st(trace: Record<string, string> | null, stage: string): string {
+function st(trace: Record<string, string> | null | undefined, stage: string): string {
   return (trace || {})[stage] || 'pending';
 }
 
-function act(trace: Record<string, string> | null): number {
+function act(trace?: Record<string, string> | null): number {
   // 当前进行到哪一步
   for (let i = 0; i < STAGES.length; i++) {
     const s = st(trace, STAGES[i]);
@@ -30,6 +30,9 @@ function act(trace: Record<string, string> | null): number {
 function fmtTime(v?: string | null) {
   return v ? new Date(v).toLocaleString() : '-';
 }
+
+// 采集结果后端新增字段（接口类型尚未声明，按可选补充）
+type JobResult = NonNullable<CollectionJob['result']> & { updated?: number; skipped?: number };
 
 export default function Jobs() {
   const [jobs, setJobs] = useState<CollectionJob[]>([]);
@@ -66,7 +69,7 @@ export default function Jobs() {
       <Title level={4} style={{ marginTop: 0 }}>采集任务</Title>
       <Row gutter={[16, 16]}>
         {jobs.map((j) => {
-          const result = j.result || {};
+          const result: JobResult = j.result || {};
           const stepStatus = j.status === 'FAILED' ? 'error' : j.status === 'SUCCESS' ? 'finish' : 'process';
           return (
             <Col xs={24} md={12} key={j.id}>

@@ -245,6 +245,29 @@ export async function parseErrorResponse(response: Response): Promise<string> {
 	return statusLabel;
 }
 
+/**
+ * 解析单个 SSE 帧（`event: X\ndata: {...}`）为 [事件名, 数据]。
+ * 数据行按 SSE 规范允许多行（多行以 \n 拼接后整体 JSON.parse），无 data 的帧（如注释）返回 null。
+ */
+function parseSseFrame(
+	frame: string,
+): [ClosedLoopEventName, ClosedLoopEventData] | null {
+	const eventMatch = /^event:\s*(.+)$/m.exec(frame);
+	const dataRaw = frame
+		.split("\n")
+		.filter((line) => line.startsWith("data:"))
+		.map((line) => line.replace(/^data:\s?/, ""))
+		.join("\n");
+	if (!eventMatch || !dataRaw) return null;
+	try {
+		const data = JSON.parse(dataRaw) as ClosedLoopEventData;
+		const event = eventMatch[1].trim() as ClosedLoopEventName;
+		return [event, { ...data, event }];
+	} catch {
+		return null;
+	}
+}
+
 class APIService {
 	private baseUrl: string;
 	private selectedAgentStorageKey = "basjoo_selected_agent_id";
@@ -1104,10 +1127,23 @@ class APIService {
 		return this.request(`/api/v1/sources/${id}`, { method: "DELETE" });
 	}
 
-	async runSource(id: string, maxPages?: number, column?: string): Promise<{ job_id: string; status: string }> {
+	/**
+	 * 触发单源采集。前三个参数保持原签名（向后兼容），extra 追加时间范围/仅新内容/条数上限
+	 * （REFACTOR_PLAN_V2 T5/T13）。仅新内容以该源"上次成功采集时间"为水位，由后端解析。
+	 */
+	async runSource(
+		id: string,
+		maxPages?: number,
+		column?: string,
+		extra: RunSourceExtra = {},
+	): Promise<{ job_id: string; status: string }> {
 		const params = new URLSearchParams();
 		if (maxPages !== undefined) params.set("max_pages", String(maxPages));
 		if (column) params.set("column", column);
+		if (extra.since) params.set("since", extra.since);
+		if (extra.until) params.set("until", extra.until);
+		if (extra.onlyNew) params.set("only_new", "true");
+		if (extra.maxItems !== undefined) params.set("max_items", String(extra.maxItems));
 		const q = params.toString() ? `?${params.toString()}` : "";
 		return this.request(`/api/v1/sources/${id}/run${q}`, { method: "POST" });
 	}
@@ -1184,9 +1220,14 @@ class APIService {
 	}
 
 	// 主动推送 · 站内通知
-	async listNotifications(limit = 20, unreadOnly = false): Promise<{ notifications: NotificationItem[]; total: number }> {
+	async listNotifications(
+		limit = 20,
+		unreadOnly = false,
+		kind?: string,
+	): Promise<{ notifications: NotificationItem[]; total: number }> {
 		const q = unreadOnly ? `&unread_only=true` : "";
-		return this.request(`/api/v1/notifications?limit=${limit}${q}`);
+		const k = kind ? `&kind=${encodeURIComponent(kind)}` : "";
+		return this.request(`/api/v1/notifications?limit=${limit}${q}${k}`);
 	}
 
 	async getUnreadCount(): Promise<{ unread: number }> {
@@ -1197,14 +1238,108 @@ class APIService {
 		return this.request(`/api/v1/notifications/${id}/read`, { method: "POST" });
 	}
 
+	/** 全部标记已读（幂等：无未读时 updated=0） */
+	async readAllNotifications(): Promise<{ updated: number }> {
+		return this.request(`/api/v1/notifications/read-all`, { method: "POST" });
+	}
+
 	// 异常运维告警
 	async checkAlerts(): Promise<{ alerts: { level: string; title: string; detail: string }[]; created: number }> {
 		return this.request(`/api/v1/alerts/check`, { method: "POST" });
 	}
 
 	// 三层 Agent 智能运营闭环 (G)
+	/** 旧同步端点（保留向后兼容：脚本/测试仍可用；前端改用 streamClosedLoop） */
 	async runClosedLoop(collect = false): Promise<ClosedLoopResult> {
 		return this.request(`/api/v1/closed-loop/run?collect=${collect}`, { method: "POST" });
+	}
+
+	/** 闭环配置 Schema：前端据此动态渲染运行配置面板 */
+	async getConfigSchema(name: "closed-loop" | "closed_loop" | "collection"): Promise<ConfigSchema> {
+		return this.request(`/api/v1/config-schema/${name}`);
+	}
+
+	/** 某数据源真实可用的栏目录像（含计数与来源标记） */
+	async listSourceColumns(sourceId: string, refresh = false): Promise<SourceColumns> {
+		const q = refresh ? "?refresh=true" : "";
+		return this.request(`/api/v1/sources/${sourceId}/columns${q}`);
+	}
+
+	/**
+	 * 流式运行闭环：POST + fetch 流式读取 SSE 帧，逐事件回调（增量渲染）。
+	 * 用 fetch 而非 EventSource：需要带 Authorization 头且要 POST 配置体。
+	 */
+	async streamClosedLoop(
+		config: ClosedLoopConfig,
+		onEvent: (event: ClosedLoopEventName, data: ClosedLoopEventData) => void,
+		signal?: AbortSignal,
+	): Promise<{ run_id: string; status: string }> {
+		const url = new URL(`${this.baseUrl}/api/v1/closed-loop/stream`, window.location.origin);
+		url.searchParams.set("locale", this.getLocale());
+		const token = localStorage.getItem("token");
+
+		const response = await fetch(url.toString(), {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				...(token ? { Authorization: `Bearer ${token}` } : {}),
+			},
+			body: JSON.stringify(config),
+			signal,
+		});
+
+		if (!response.ok) {
+			throw new Error(await parseErrorResponse(response));
+		}
+		if (!response.body) {
+			throw new Error("当前浏览器不支持流式响应");
+		}
+
+		const reader = response.body.getReader();
+		const decoder = new TextDecoder();
+		let buffer = "";
+		let runId = "";
+		let status = "ok";
+
+		for (;;) {
+			const { value, done } = await reader.read();
+			if (done) break;
+			buffer += decoder.decode(value, { stream: true });
+
+			let boundary = buffer.indexOf("\n\n");
+			while (boundary >= 0) {
+				const frame = buffer.slice(0, boundary);
+				buffer = buffer.slice(boundary + 2);
+				const parsed = parseSseFrame(frame);
+				if (parsed) {
+					const [event, data] = parsed;
+					if (event === "run_started" && typeof data.run_id === "string") {
+						runId = data.run_id;
+					}
+					if (event === "run_finished" && typeof data.status === "string") {
+						status = data.status;
+					}
+					onEvent(event, data);
+				}
+				boundary = buffer.indexOf("\n\n");
+			}
+		}
+		return { run_id: runId, status };
+	}
+
+	/** 闭环运行历史（含参数快照，可复现） */
+	async listClosedLoopRuns(limit = 10): Promise<{ runs: ClosedLoopRunItem[]; total: number }> {
+		return this.request(`/api/v1/closed-loop/runs?limit=${limit}`);
+	}
+
+	/** 回放：与实时流同构的事件序列（前端用同一个 reducer 渲染） */
+	async getClosedLoopRun(runId: string): Promise<ClosedLoopRunDetail> {
+		return this.request(`/api/v1/closed-loop/runs/${runId}`);
+	}
+
+	/** 请求取消运行（协作式：阶段之间生效） */
+	async cancelClosedLoopRun(runId: string): Promise<{ run_id: string; cancel_requested: boolean }> {
+		return this.request(`/api/v1/closed-loop/runs/${runId}/cancel`, { method: "POST" });
 	}
 
 	async listDecisions(limit = 10): Promise<{ runs: DecisionRun[]; total: number }> {
@@ -1407,6 +1542,8 @@ export interface InsightResult {
 
 export interface InsightReportItem extends InsightResult {
 	id: string;
+	/** 后端生成的干净标题（去 Markdown）；旧数据可能为空，前端需回退 */
+	title?: string | null;
 	created_at?: string;
 }
 
@@ -1418,6 +1555,7 @@ export interface ClosedLoopStage {
 }
 
 export interface ClosedLoopResult {
+	run_id?: string;
 	stages: ClosedLoopStage[];
 	summary: string;
 	status: string;
@@ -1429,12 +1567,103 @@ export interface DecisionEntry {
 	detail?: string | null;
 	status: string;
 	created_at?: string;
+	/** 该步完成时刻（REFACTOR_PLAN_V2 T2：时间线右侧展示） */
+	finished_at?: string | null;
+	/** 该步耗时（毫秒） */
+	duration_ms?: number | null;
 }
 
 export interface DecisionRun {
 	run_id: string;
 	created_at?: string;
 	entries: DecisionEntry[];
+}
+
+// ===== 配置 Schema（REFACTOR_PLAN_V2 T3）：后端声明，前端动态渲染表单 =====
+export type ConfigFieldType = "boolean" | "int" | "string" | "date" | "multi_select";
+
+export interface ConfigField {
+	key: string;
+	type: ConfigFieldType;
+	default: unknown;
+	label: string;
+	hint?: string;
+	min?: number;
+	max?: number;
+	options_source?: string;
+	/** 仅前端渲染联动：勾选/取值满足时才展开显示 */
+	visible_if?: Record<string, unknown>;
+}
+
+export interface ConfigGroup {
+	key: string;
+	title: string;
+	fields: ConfigField[];
+}
+
+export interface ConfigSchema {
+	name: string;
+	version: number;
+	groups: ConfigGroup[];
+}
+
+/** 闭环运行配置（键与 Schema 字段一一对应） */
+export type ClosedLoopConfig = Record<string, boolean | number | string | string[] | null>;
+
+// ===== 闭环 SSE 流式事件（REFACTOR_PLAN_V2 T4，字段冻结） =====
+export type ClosedLoopEventName =
+	| "run_started"
+	| "stage_started"
+	| "stage_decision"
+	| "stage_finished"
+	| "run_finished"
+	| "run_error"
+	| "heartbeat";
+
+export interface ClosedLoopEventData {
+	event: ClosedLoopEventName;
+	run_id?: string;
+	stage?: string;
+	name?: string;
+	index?: number;
+	total?: number;
+	agent?: string;
+	decision?: string;
+	detail?: string | null;
+	status?: string;
+	finished_at?: string | null;
+	started_at?: string | null;
+	duration_ms?: number | null;
+	summary?: string | null;
+	message?: string;
+	config?: ClosedLoopConfig;
+	[k: string]: unknown;
+}
+
+export interface ClosedLoopRunItem {
+	run_id: string;
+	type?: string;
+	status: string;
+	params: ClosedLoopConfig;
+	summary?: string | null;
+	error?: string | null;
+	cancel_requested?: boolean;
+	started_at?: string | null;
+	finished_at?: string | null;
+	duration_ms?: number | null;
+}
+
+export interface ClosedLoopRunDetail extends ClosedLoopRunItem {
+	/** 与实时事件同构的回放序列 */
+	events: ClosedLoopEventData[];
+}
+
+/** 单源采集的扩展参数（时间范围 / 仅新内容 / 条数上限） */
+export interface RunSourceExtra {
+	since?: string;
+	until?: string;
+	onlyNew?: boolean;
+	maxItems?: number;
 }
 
 export interface AskResponse {
@@ -1483,20 +1712,42 @@ export interface SourceMonitor {
 	recent_days: number;
 	total_new: number;
 	sources: number;
+	/** 本次快照的服务端时间：前端据此给出"已更新 · HH:mm:ss"的确定反馈 */
+	refreshed_at?: string | null;
 	items: {
 		source_id: string;
 		name: string;
 		source_type: string;
 		base_url?: string | null;
 		status: string;
+		/** 最近一次尝试（开始）采集时间 */
 		last_crawled_at?: string | null;
+		/** 最近一次采集成功完成时间（展示主字段） */
+		last_success_at?: string | null;
+		last_error?: string | null;
 		new_count: number;
 		recent_titles: string[];
 	}[];
 }
 
+export interface SourceColumn {
+	value: string;
+	label: string;
+	count: number;
+	/** history=历史分布（真实可筛到数据）/ adapter=适配器声明（尚未采集到内容） */
+	origin: string;
+}
+
+export interface SourceColumns {
+	source_id: string;
+	columns: SourceColumn[];
+	generated_at: string;
+	cached: boolean;
+}
+
 export interface BriefResult {
 	id?: string;
+	title?: string;
 	content: string;
 	data?: unknown;
 	created_at?: string;
@@ -1513,6 +1764,8 @@ export interface NotificationItem {
 	title: string;
 	content?: string | null;
 	read: boolean;
+	/** 点击通知的跳转目标（前端路由，如 /insights） */
+	link?: string | null;
 	created_at?: string;
 }
 
