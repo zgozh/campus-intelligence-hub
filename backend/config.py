@@ -209,6 +209,14 @@ class Settings(BaseSettings):
     # 主动推送：群机器人 webhook（如飞书/企微/钉钉群机器人），留空则仅站内通知
     campus_notify_webhook: str = ""
 
+    # 采集礼貌与安全（REFACTOR_PLAN_V2 T14）
+    # 同一站点连续请求的最小间隔（毫秒），避免高频抓取给对方站点造成压力；0 = 不限制
+    campus_collect_interval_ms: int = 500
+    # 单次采集入库条数硬上限（超出截断并留痕；config_schema 的 max_items 不得超过它）
+    campus_collect_max_items: int = 500
+    # 采集链路是否强制 SSRF 校验（所有列表页/详情页 URL 必须过 url_safety）
+    campus_collect_ssrf_check: bool = True
+
     def model_post_init(self, __context) -> None:
         secret_key_file = self.secret_key_file.strip() or "/app/data/.secret_key"
         object.__setattr__(self, "secret_key_file", secret_key_file)

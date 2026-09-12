@@ -923,6 +923,7 @@ class CollectionJobItem(BaseModel):
     id: str
     source_id: str
     status: str
+    params: Optional[Dict[str, Any]] = None
     stage_trace: Optional[Dict[str, Any]] = None
     result: Optional[Dict[str, Any]] = None
     error_message: Optional[str] = None

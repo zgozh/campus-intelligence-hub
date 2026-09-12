@@ -858,6 +858,7 @@ class InsightReport(Base):
         String(50), primary_key=True, default=lambda: f"ins_{uuid.uuid4().hex[:12]}"
     )
     content = Column(Text, nullable=False)  # Markdown 洞察叙事
+    title = Column(String(200), nullable=True)  # 干净标题（去 Markdown，供列表/折叠头展示）
     data = Column(JSON, nullable=True)  # 生成时的运营数据快照
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -871,6 +872,7 @@ class BriefReport(Base):
         String(50), primary_key=True, default=lambda: f"br_{uuid.uuid4().hex[:12]}"
     )
     content = Column(Text, nullable=False)  # Markdown 校务快讯
+    title = Column(String(200), nullable=True)  # 干净标题（去 Markdown，供列表/折叠头展示）
     data = Column(JSON, nullable=True)  # 生成时的监控数据快照
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -886,6 +888,7 @@ class Notification(Base):
     kind = Column(String(30), nullable=False)  # brief / insight / expiring / system
     title = Column(String(200), nullable=False)
     content = Column(Text, nullable=True)  # markdown 摘要
+    link = Column(String(1000), nullable=True)  # 点击通知的跳转目标（前端路由，如 /insights）
     read = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -903,4 +906,29 @@ class DecisionLog(Base):
     decision = Column(String(200), nullable=False)  # 简短决策
     detail = Column(Text, nullable=True)  # 说明
     status = Column(String(20), nullable=False, default="ok")  # ok/partial/error/skip
+    finished_at = Column(DateTime(timezone=True), nullable=True)  # 该步实际完成时刻（时间线右侧展示）
+    duration_ms = Column(Integer, nullable=True)  # 该步耗时（毫秒）
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class RunRecord(Base):
+    """运行记录（REFACTOR_PLAN_V2 T1）：一次闭环/长任务运行的生命周期与参数快照。
+
+    实时 SSE 流与历史回放共用同一份记录：run_id 与 DecisionLog.run_id 同值。
+    """
+
+    __tablename__ = "run_records"
+
+    run_id = Column(String(50), primary_key=True)
+    type = Column(String(20), nullable=False, default="closed_loop")  # closed_loop（预留 collection）
+    status = Column(String(20), nullable=False, default="running")  # running/ok/partial/error/cancelled
+    params = Column(JSON, nullable=True)  # 校验后的配置快照（可复现）
+    summary = Column(Text, nullable=True)  # 结果摘要
+    error = Column(Text, nullable=True)  # 不可恢复错误
+    cancel_requested = Column(Boolean, nullable=False, default=False)  # 协作式取消标志
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+    duration_ms = Column(Integer, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (Index("ix_run_records_type_created", "type", "created_at"),)

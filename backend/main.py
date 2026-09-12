@@ -12,6 +12,8 @@ from api.endpoints import auth
 from api.v1 import endpoints as v1_endpoints
 from api.v1 import kb_document_endpoints as v1_kb_doc_endpoints
 from api.v1 import source_endpoints
+from api.v1 import config_endpoints
+from api.v1 import closed_loop_endpoints
 from api.v1 import ask_endpoints
 from api.v1 import public_api as v1_public_api
 from api.v1 import mcp_endpoints as v1_mcp
@@ -221,6 +223,8 @@ app.include_router(auth.router, prefix="/api/admin", tags=["auth"])
 app.include_router(v1_endpoints.router, tags=["v1"])
 app.include_router(v1_kb_doc_endpoints.router, tags=["kb-documents"])
 app.include_router(source_endpoints.router, tags=["sources"])
+app.include_router(config_endpoints.router, tags=["config-schema"])
+app.include_router(closed_loop_endpoints.router, tags=["closed-loop"])
 app.include_router(ask_endpoints.router, tags=["ask"])
 app.include_router(v1_public_api.router, tags=["public-api"])
 app.include_router(v1_mcp.router, tags=["mcp"])
