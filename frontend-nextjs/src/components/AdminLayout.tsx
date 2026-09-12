@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState, useEffect } from "react";
-import { Avatar, Badge, Button, Empty, Layout, List, Menu, Popover, Tag, theme } from "antd";
+import { Avatar, Badge, Button, Drawer, Empty, Layout, List, Menu, Tag, theme } from "antd";
 import {
   ApartmentOutlined,
   BellOutlined,
@@ -226,88 +226,88 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             justifyContent: "flex-end",
           }}
         >
-          <Popover
-            trigger="click"
-            placement="bottomRight"
+          {/* 通知中心改用 Drawer（右侧抽屉）：
+              antd 5.29 + @rc-component/trigger 2.3 的 Popover 在此环境下会把纵向对齐算成
+              -1000vh，弹层被放到视口外（真机探针实测 top=-1000vh、可见比例 0），
+              用户表现为"点了没反应"；且通知多时面板可高达 800px+ 反而超过视口。
+              Drawer 用 fixed 定位、无对齐计算，天然可见且可滚动，规避该类缺陷。 */}
+          <span
+            style={{ display: "inline-flex", cursor: "pointer" }}
+            onClick={() => {
+              setNotifOpen(true);
+              handleNotifOpenChange(true);
+            }}
+          >
+            <Badge count={unread} size="small">
+              <Button type="text" icon={<BellOutlined />} aria-label="通知中心" style={{ fontSize: 18 }} />
+            </Badge>
+          </span>
+          <Drawer
+            title="通知中心"
+            placement="right"
+            width={380}
             open={notifOpen}
-            onOpenChange={handleNotifOpenChange}
-            content={
-              <div style={{ width: 340 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                  <b>通知中心</b>
-                  <Button
-                    type="link"
-                    size="small"
-                    onClick={() => {
-                      setNotifOpen(false);
-                      navigate("/notifications");
-                    }}
-                  >
-                    查看全部
-                  </Button>
-                </div>
-                {notifError ? (
-                  <div style={{ padding: "12px 0", textAlign: "center" }}>
-                    <div style={{ color: token.colorError, fontSize: 12, marginBottom: 8 }}>
-                      通知加载失败，点击重试
-                    </div>
-                    <Button size="small" loading={notifLoading} onClick={() => { void loadNotifications(); }}>
-                      重试
-                    </Button>
-                  </div>
-                ) : notifications.length === 0 ? (
-                  <Empty description="暂无通知" imageStyle={{ height: 50 }} />
-                ) : (
-                  <List
-                    size="small"
-                    loading={notifLoading}
-                    dataSource={notifications}
-                    renderItem={(n) => (
-                      <List.Item
-                        onClick={() => { void handleNotificationClick(n); }}
-                        style={{ cursor: "pointer" }}
-                      >
-                        <List.Item.Meta
-                          title={
-                            <span style={{ fontWeight: n.read ? 400 : 600 }}>
-                              <Tag color={n.read ? "default" : "blue"}>{KIND_ZH[n.kind] || n.kind}</Tag>
-                              {displayTitle(n.title, 30)}
-                            </span>
-                          }
-                          description={formatDateTime(n.created_at)}
-                        />
-                      </List.Item>
-                    )}
-                  />
-                )}
-                <div
-                  style={{
-                    borderTop: `1px solid ${token.colorBorderSecondary}`,
-                    marginTop: 8,
-                    paddingTop: 8,
-                    textAlign: "center",
-                  }}
-                >
-                  <Button
-                    type="link"
-                    size="small"
-                    icon={<CheckOutlined />}
-                    loading={readAllLoading}
-                    onClick={() => { void handleReadAll(); }}
-                  >
-                    全部已读
-                  </Button>
-                </div>
-              </div>
+            onClose={() => setNotifOpen(false)}
+            extra={
+              <Button
+                type="link"
+                size="small"
+                onClick={() => {
+                  setNotifOpen(false);
+                  navigate("/notifications");
+                }}
+              >
+                查看全部
+              </Button>
+            }
+            footer={
+              <Button
+                block
+                type="link"
+                size="small"
+                icon={<CheckOutlined />}
+                loading={readAllLoading}
+                onClick={() => { void handleReadAll(); }}
+              >
+                全部已读
+              </Button>
             }
           >
-            {/* Popover 需要能接收事件/ref 的单一子元素：用原生 span 承载，Badge 包裹会导致 trigger 失效 */}
-            <span style={{ display: "inline-flex", cursor: "pointer" }}>
-              <Badge count={unread} size="small">
-                <Button type="text" icon={<BellOutlined />} aria-label="通知中心" style={{ fontSize: 18 }} />
-              </Badge>
-            </span>
-          </Popover>
+            {notifError ? (
+              <div style={{ padding: "12px 0", textAlign: "center" }}>
+                <div style={{ color: token.colorError, fontSize: 12, marginBottom: 8 }}>
+                  通知加载失败，点击重试
+                </div>
+                <Button size="small" loading={notifLoading} onClick={() => { void loadNotifications(); }}>
+                  重试
+                </Button>
+              </div>
+            ) : notifications.length === 0 ? (
+              <Empty description="暂无通知" imageStyle={{ height: 50 }} />
+            ) : (
+              <List
+                size="small"
+                loading={notifLoading}
+                dataSource={notifications}
+                renderItem={(n) => (
+                  <List.Item
+                    onClick={() => { void handleNotificationClick(n); }}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <List.Item.Meta
+                      title={
+                        <span style={{ fontWeight: n.read ? 400 : 600 }}>
+                          <Tag color={n.read ? "default" : "blue"}>{KIND_ZH[n.kind] || n.kind}</Tag>
+                          {displayTitle(n.title, 30)}
+                        </span>
+                      }
+                      description={formatDateTime(n.created_at)}
+                    />
+                  </List.Item>
+                )}
+              />
+            )}
+          </Drawer>
         </Header>
         <Content style={{ padding: 24, background: token.colorBgLayout, minHeight: "calc(100vh - 64px)" }}>
           {children}
