@@ -18,6 +18,15 @@ from sqlalchemy import select
 import database
 from models import Agent, KnowledgeBase, KbDocument, Tenant, URLSource
 
+# 本文件针对 `/api/v1/urls:*`（URL 采集 → 索引）与 scrapling /discover 旧链路；
+# 该链路已被「KB 文档管道」取代（见 CLAUDE.md：Document ingestion is via
+# kb_document_endpoints.py；URL 与文件上传端点、legacy index 端点均已移除），
+# 用例调用的端点不复存在，无法通过。保留文件作为历史记录，整文件跳过
+# （重构方案 REFACTOR_PLAN_V2 R9 要求后端 pytest 全绿，此处以显式 skip 而非删除保留证据）。
+pytestmark = pytest.mark.skip(
+    reason="URL/文件采集与 legacy index 链路已移除，改用 KB 文档管道（kb_document_endpoints.py）"
+)
+
 
 @pytest.mark.asyncio
 async def test_url_creation_returns_list_response_shape(client, default_agent_id):
