@@ -13,7 +13,8 @@
  *
  * 数据来源：`api.getConfigSchema("closed-loop")`（失败 → 可见提示，不阻塞）、
  * `api.listSources()`（失败 → 提示且仅数据源多选为空，其余字段照常可用）、
- * `api.listSourceColumns(id)`（仅在**恰好选中 1 个数据源**时加载该源真实栏目作为 columnOptions；
+ * `api.listSourceColumns(id)`（单选）/ `api.listMultiSourceColumns(ids)`（多选或未选 = 全部 active 源的并集，
+ * 见 REFACTOR_PLAN_V2_2 B2）加载真实栏目作为 columnOptions；
  * 多源时各源栏目定义不一致，保持"留空 = 不限"）。
  */
 import { useEffect, useMemo, useState } from "react";
@@ -109,19 +110,28 @@ export default function RunConfigModal({ open, onCancel, onConfirm, fieldErrors 
     [sources],
   );
 
-  // 恰好选中 1 个数据源时，栏目选项取该源的真实栏目录像（多源时栏目定义不一致 → 留空 = 不限）
+  // 栏目选项（B2）：单选走单源接口、多选走跨源并集接口；未选源时给出"全部 active 源的并集"
   const sourceKey = Array.isArray(config.source_ids) ? config.source_ids.join(",") : "";
+  const selectedIdsForColumns = Array.isArray(config.source_ids) ? config.source_ids : [];
   useEffect(() => {
-    if (!open || !sourceKey || sourceKey.includes(",")) {
+    if (!open) {
       setColumnOptions([]);
       return;
     }
     let alive = true;
-    api
-      .listSourceColumns(sourceKey)
-      .then((data) => {
-        if (!alive) return;
-        setColumnOptions((data.columns || []).map((item) => ({ label: item.label, value: item.value })));
+    const ids = sourceKey ? sourceKey.split(",") : [];
+    const load = async (): Promise<{ label: string; value: string }[]> => {
+      if (ids.length === 1) {
+        const data = await api.listSourceColumns(ids[0]);
+        return (data.columns || []).map((item) => ({ label: item.label, value: item.value }));
+      }
+      // 多源（含未选 = 全部 active）：用并集，避免"多选后栏目不可选"
+      const data = await api.listMultiSourceColumns(ids);
+      return (data.columns || []).map((item) => ({ label: item.label, value: item.value }));
+    };
+    load()
+      .then((options) => {
+        if (alive) setColumnOptions(options);
       })
       .catch(() => {
         if (alive) setColumnOptions([]);

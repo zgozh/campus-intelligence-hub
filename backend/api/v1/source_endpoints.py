@@ -321,6 +321,29 @@ async def ingest_file(
     }
 
 
+# ⚠️ 路由顺序敏感：本接口必须注册在 `/sources/{source_id}` **之前**，
+# 否则静态路径 "columns" 会被动态路径当作 source_id 吃掉（返回 404 数据源不存在）。
+# 这是本项目已踩过的"同路径冲突"同类问题（见 REFACTOR_PLAN_V2_2 B2）。
+@router.get("/sources/columns")
+async def list_sources_columns(
+    source_ids: str | None = None,
+    refresh: bool = False,
+    current_user: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """跨源栏目并集（B2）：闭环保配置面板多选数据源后，也能取到"合起来可选的栏目"。
+
+    `source_ids` 为逗号分隔；留空 = 全部 active 源。
+    同名栏目合并计数并附每源分布；适配器声明的栏目以 count=0 补充。
+    """
+    ids = [item.strip() for item in (source_ids or "").split(",") if item.strip()]
+    from services import column_discovery_service
+
+    return await column_discovery_service.discover_columns_multi(
+        db, ids or None, refresh=refresh
+    )
+
+
 @router.get("/sources/{source_id}", response_model=SourceItem)
 async def get_source(
     source_id: str,

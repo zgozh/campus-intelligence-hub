@@ -1357,6 +1357,18 @@ class APIService {
 	}
 
 	/**
+	 * 跨源栏目并集（B2）：闭环/采集面板多选数据源后取"合起来可选的栏目"。
+	 * sourceIds 为空 = 全部 active 源；同名栏目已合并计数并附每源分布。
+	 */
+	async listMultiSourceColumns(sourceIds: string[] = [], refresh = false): Promise<SourceColumnsMulti> {
+		const params = new URLSearchParams();
+		if (sourceIds.length > 0) params.set("source_ids", sourceIds.join(","));
+		if (refresh) params.set("refresh", "true");
+		const q = params.toString() ? `?${params.toString()}` : "";
+		return this.request(`/api/v1/sources/columns${q}`);
+	}
+
+	/**
 	 * 流式运行闭环：POST + fetch 流式读取 SSE 帧，逐事件回调（增量渲染）。
 	 * 用 fetch 而非 EventSource：需要带 Authorization 头且要 POST 配置体。
 	 */
@@ -1881,6 +1893,15 @@ export interface SourceColumn {
 export interface SourceColumns {
 	source_id: string;
 	columns: SourceColumn[];
+	generated_at: string;
+	cached: boolean;
+}
+
+/** 跨源栏目并集（B2）：同名栏目合并计数，并附每源分布 */
+export interface SourceColumnsMulti {
+	columns: (SourceColumn & { sources: { source_id: string; count: number }[] })[];
+	source_count: number;
+	source_ids: string[];
 	generated_at: string;
 	cached: boolean;
 }

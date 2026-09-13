@@ -42,6 +42,7 @@ vi.mock("../../src/services/api", () => ({
     cancelClosedLoopRun: vi.fn(),
     getConfigSchema: vi.fn(),
     listSourceColumns: vi.fn(),
+    listMultiSourceColumns: vi.fn(),
     streamClosedLoop: vi.fn(),
     seedDemo: vi.fn(),
     listKnowledgeObjects: vi.fn(),
@@ -81,6 +82,8 @@ const SCHEMA: ConfigSchema = {
           hint: "空 = 全部 active 数据源",
         },
         { key: "max_pages", type: "int", default: 1, min: 1, max: 5, label: "每源抓取页数", visible_if: { collect: true } },
+        // B2：栏目字段的候选来自跨源并集接口（listMultiSourceColumns）
+        { key: "column", type: "string", default: null, label: "内容类型（栏目）", visible_if: { collect: true }, hint: "空 = 不限" },
       ],
     },
     {
@@ -176,6 +179,16 @@ beforeEach(() => {
   mockedApi.listClosedLoopRuns.mockResolvedValue({ runs: [], total: 0 });
   mockedApi.getConfigSchema.mockResolvedValue(SCHEMA);
   mockedApi.listSourceColumns.mockResolvedValue({ source_id: "src_1", columns: [], generated_at: "2026-09-08T00:00:00Z", cached: false });
+  mockedApi.listMultiSourceColumns.mockResolvedValue({
+    columns: [
+      { value: "通知公告", label: "通知公告 (5)", count: 5, origin: "history", sources: [{ source_id: "src_1", count: 5 }] },
+      { value: "教育教学", label: "教育教学 (2)", count: 2, origin: "history", sources: [{ source_id: "src_2", count: 2 }] },
+    ],
+    source_count: 2,
+    source_ids: ["src_1", "src_2"],
+    generated_at: "2026-09-08T00:00:00Z",
+    cached: false,
+  });
   mockedApi.streamClosedLoop.mockResolvedValue({
     run_id: LIVE_RUN_ID,
     terminal: "run_finished",
@@ -276,6 +289,30 @@ describe("ClosedLoop 流式运行", () => {
     expect(screen.getByTestId("schema-field-max_pages")).toBeInTheDocument();
     // 风险提示：未选数据源 = 全部 active 源（2 个），每源 1 页
     expect(await screen.findByText(/将访问 2 个外部数据源（每源最多 1 页）/)).toBeInTheDocument();
+  });
+
+  it("B2：未选数据源时栏目走跨源并集接口（不再因多源而无可选项）", async () => {
+    render(<ClosedLoop />);
+    await openConfigPanel();
+
+    // 打开面板即应加载"全部 active 源"的栏目并集；旧实现会在多源/未选时直接返回空
+    await waitFor(() => {
+      expect(mockedApi.listMultiSourceColumns).toHaveBeenCalled();
+    });
+    const [calledIds] = mockedApi.listMultiSourceColumns.mock.calls[0] as unknown as [string[]];
+    expect(Array.isArray(calledIds)).toBe(true);
+    expect(calledIds).toHaveLength(0);
+
+    // 勾选采集并展开采集分组后，栏目字段可用（选项来自并集接口）
+    await waitFor(() => {
+      expect(within(screen.getByTestId("schema-field-collect")).getByRole("switch")).toBeInTheDocument();
+    });
+    fireEvent.click(within(screen.getByTestId("schema-field-collect")).getByRole("switch"));
+    // 先确认联动确实生效（与既有用例同一判据），再断言栏目字段
+    await waitFor(() => {
+      expect(screen.getByTestId("schema-field-source_ids")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("schema-field-column")).toBeInTheDocument();
   });
 
   it("点「一键运行闭环」先弹配置面板，确认后 streamClosedLoop 带上面板中设定的参数", async () => {
