@@ -19,6 +19,8 @@ eggs/
 .eggs/
 lib/
 !frontend-nextjs/src/lib/
+# 例外：真机浏览器场景运行器的共享 CDP 客户端（scripts/lib/ 不是 Python venv）
+!scripts/lib/
 lib64/
 parts/
 sdist/
