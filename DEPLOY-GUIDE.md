@@ -85,3 +85,35 @@ POST /api/review/{id}/approve|reject    # 需登录
 - ✅ **对外 API**（/api/*）+ **Campus Knowledge MCP**（/api/mcp，JSON-RPC）
 - ✅ 全站冒烟：前端 12 页面 200、后端全部端点非 500、组件-API 绑定无遗漏
 - ✅ Mock 模式：SEED_DEMO / SEED_CHANGE / RESET_DEMO / docker-compose.demo.yml
+
+## 七、发布前 checklist（对外部署逐项确认）
+
+> 演示/比赛环境可保持默认；**对外提供访问**时必须逐项确认。每项都给了可执行命令。
+
+- [ ] **1. 关闭鉴权放宽**：`.env` 设 `DEMO_RELAX_AUTH=false`
+  - 效果：`register` 关闭自助注册（首个管理员仍可 bootstrap）；`require_super_admin` 恢复真实校验
+  - 复核：`docker compose exec -T backend python -c "from config import settings; print(settings.demo_relax_auth)"` → `False`
+  - 回归测试：`pytest tests/test_auth_modes.py`（两档均有断言）
+- [ ] **2. 密钥强制**：`.env` 设强随机 `SECRET_KEY` / `ENCRYPTION_KEY`，并设 `REQUIRE_SECRET_KEY=true`
+- [ ] **3. CORS 收紧**：`ALLOWED_ORIGINS` 改为实际域名（默认 `*` 仅适合本地演示）
+- [ ] **4. HTTPS 与域名**：把证书放到 `./ssl`（nginx entrypoint 会自动启用 HTTPS 跳转）；设 `SERVER_DOMAIN` 收敛 Host
+- [ ] **5. 数据卷备份**：
+  ```bash
+  docker run --rm -v campus-intelligence-hub_postgres-data:/data -v "$PWD":/backup alpine \
+    tar czf /backup/postgres-data-$(date +%F).tgz -C /data .
+  docker run --rm -v campus-intelligence-hub_backend-data:/data -v "$PWD":/backup alpine \
+    tar czf /backup/backend-data-$(date +%F).tgz -C /data .
+  ```
+  （卷名以 `docker volume ls` 实际为准）
+- [ ] **6. 迁移已执行**：看启动日志应出现 `迁移检查完成：{'applied': n, 'skipped': m, 'total': k}`；
+  且 `docker compose exec -T postgres psql -U postgres -d campus_hub -c "SELECT name FROM schema_migrations;"` 有记录
+- [ ] **7. 崩溃残留已清理**：启动日志应有 `崩溃恢复检查完成：无僵尸运行`
+  （若有：说明上次进程在闭环运行中被重启，已被自动结算为 error，非故障）
+- [ ] **8. 版本可见**：`curl -s http://localhost:8000/api/v1/version` 的 `build` 与页面侧边栏左下角标识一致
+  （重建请用 `powershell -File scripts/build_all.ps1`，它会注入同一标识）
+- [ ] **9. 限流复核**：登录限流 5 次/300s（滑动窗口，**被拒请求也会推进窗口**，不要短间隔重试）；
+  重端点 `/closed-loop/stream`、`/sources/{id}/run` 建议纳入既有 rate-limit 中间件（10 次/60s）
+- [ ] **10. 全量验收**：`powershell -File scripts/verify_all.ps1`（后端 pytest + 前端 typecheck/test/build +
+  接口冒烟 + 真实浏览器场景冒烟 + 文档一致性），全绿才发布
+- [ ] **11. 人工演示动线**：按 `DEMO_SCRIPT.md` 走一遍（配置面板 → 实时时间线 → 通知中心），确认浏览器**硬刷新**后版本号正确
+- [ ] **12. 日志与保留**：确认 `LOG_LEVEL` 合适、容器 `restart: unless-stopped` 生效、访问日志有留存策略
