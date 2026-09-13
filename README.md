@@ -263,6 +263,9 @@ powershell -File scripts/verify_all.ps1
 
 # 4) 注入构建标识并重建（签名：git短hash-时间戳）
 powershell -File scripts/build_all.ps1
+
+# 5) 重新生成 Gitee 展示仓库（单 commit，剔除开发过程文档）
+powershell -File scripts/release_gitee.ps1 -Push
 ```
 
 其它：`scripts/browser_probe.mjs`（单元素探针，可排查任意页面"点了有没有反应"）、
@@ -270,6 +273,15 @@ powershell -File scripts/build_all.ps1
 
 > 两条实测教训：**jsdom 通过 ≠ 用户点得开**（真实缺陷曾表现为弹层被定位到视口外几千像素）；
 > **重建镜像 ≠ 用户刷新**（已打开的标签页仍跑旧 bundle，靠左下角版本号区分）。
+
+### 双仓库策略（开发仓 / 展示仓）
+
+| 仓库 | 内容 | 用途 |
+| --- | --- | --- |
+| GitHub `zgozh/campus-intelligence-hub` | **完整提交历史**，含方案、重构计划、审计、任务清单、AI 协作约定等过程文档 | 开发主仓库，每个 commit 可追溯、可 review |
+| Gitee `zgozh/campus-intelligence-hub` | **单个提交**的可运行快照：源码 + 配置 + `README.md` + `ARCHITECTURE.md` + `DEPLOY-GUIDE.md` | 赛事展示仓库 |
+
+展示仓库不是手工维护的，而是由 `scripts/release_gitee.ps1` 从当前 `HEAD` **可重复生成**（干跑列出纳入/剔除清单 → 单提交 → `force push`）。这样"哪些属于开发过程文档"是一条可评审、可复跑的规则，而不是一次性手工删除。
 
 ## 目录结构
 
