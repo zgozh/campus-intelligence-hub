@@ -19,6 +19,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1")
 
 
+@router.get("/version")
+async def get_version():
+    """构建版本（公开只读）：供前端与真机探针确认"跑的是哪个构建"（REFACTOR_PLAN_V2_2 A2）。
+
+    刻意不加鉴权：版本号不构成攻击面，而探针/用户需要不登录也能核对版本；
+    返回内容仅 name/version/build/commit/environment，不含任何配置或密钥。
+    """
+    from services.version_service import get_version_info
+
+    return get_version_info()
+
+
 @router.get("/config-schema/{name}")
 async def get_config_schema(
     name: str,

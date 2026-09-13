@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   listNotifications: vi.fn(),
   markNotificationRead: vi.fn(),
   readAllNotifications: vi.fn(),
+  getVersion: vi.fn(),
   navigate: vi.fn(),
 }));
 
@@ -37,6 +38,7 @@ vi.mock("../../src/services/api", () => ({
     listNotifications: mocks.listNotifications,
     markNotificationRead: mocks.markNotificationRead,
     readAllNotifications: mocks.readAllNotifications,
+    getVersion: mocks.getVersion,
   },
 }));
 
@@ -65,6 +67,14 @@ describe("AdminLayout 通知中心（T11）", () => {
     mocks.listNotifications.mockResolvedValue({ notifications: [NOTIFICATION], total: 1 });
     mocks.markNotificationRead.mockResolvedValue({ id: "n1", read: true });
     mocks.readAllNotifications.mockResolvedValue({ updated: 1 });
+    // A2：版本接口默认返回与前端一致的构建标识（不触发"版本不一致"提示）
+    mocks.getVersion.mockResolvedValue({
+      name: "campus-intelligence-hub",
+      version: "2.2.0",
+      build: "dev",
+      commit: "unknown",
+      environment: "test",
+    });
   });
 
   it("点击铃铛后面板展开并显示通知内容（Popover 受控 + 可交互子元素）", async () => {

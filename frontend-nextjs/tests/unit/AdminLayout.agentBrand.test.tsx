@@ -21,6 +21,14 @@ vi.mock("../../src/services/api", () => ({
 	api: {
 		getUnreadCount: vi.fn().mockResolvedValue({ unread: 2 }),
 		listNotifications: vi.fn().mockResolvedValue({ notifications: [], total: 0 }),
+		// A2：布局挂载时会查后端构建版本；不 mock 会抛错
+		getVersion: vi.fn().mockResolvedValue({
+			name: "campus-intelligence-hub",
+			version: "2.2.0",
+			build: "dev",
+			commit: "unknown",
+			environment: "test",
+		}),
 	},
 }));
 

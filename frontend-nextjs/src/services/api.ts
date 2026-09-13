@@ -1269,6 +1269,10 @@ class APIService {
 	 * 流式运行闭环：POST + fetch 流式读取 SSE 帧，逐事件回调（增量渲染）。
 	 * 用 fetch 而非 EventSource：需要带 Authorization 头且要 POST 配置体。
 	 */
+	async getVersion(): Promise<VersionInfo> {
+		return this.request(`/api/v1/version`);
+	}
+
 	async streamClosedLoop(
 		config: ClosedLoopConfig,
 		onEvent: (event: ClosedLoopEventName, data: ClosedLoopEventData) => void,
@@ -1664,6 +1668,16 @@ export interface RunSourceExtra {
 	until?: string;
 	onlyNew?: boolean;
 	maxItems?: number;
+}
+
+/** 构建版本信息（GET /api/v1/version，公开只读） */
+export interface VersionInfo {
+	name: string;
+	version: string;
+	/** 构建标识：应与前端 build-info.ts 的 BUILD_ID 一致（不一致即前后端版本不匹配） */
+	build: string;
+	commit: string;
+	environment: string;
 }
 
 export interface AskResponse {

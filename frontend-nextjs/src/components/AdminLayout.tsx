@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState, useEffect } from "react";
 import { Avatar, Badge, Button, Drawer, Empty, Layout, List, Menu, Tag, theme } from "antd";
+import { APP_VERSION, BUILD_ID } from "../build-info";
 import {
   ApartmentOutlined,
   BellOutlined,
@@ -70,6 +71,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [notifLoading, setNotifLoading] = useState(false);
   const [notifError, setNotifError] = useState(false);
   const [readAllLoading, setReadAllLoading] = useState(false);
+  // 前后端构建是否不一致（A2）：不一致只提示，不阻塞
+  const [buildMismatch, setBuildMismatch] = useState(false);
 
   /** 未读数：轮询与手动刷新共用；失败保留上次值（不把数字清零误导用户） */
   const refreshUnread = useCallback(async () => {
@@ -107,6 +110,24 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }, UNREAD_POLL_MS);
     return () => clearInterval(timer);
   }, [refreshUnread]);
+
+  // 前后端构建一致性检查（A2）：失败静默（版本信息拿不到不该影响使用）
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const info = await api.getVersion();
+        if (!cancelled && info?.build && info.build !== "unknown" && info.build !== BUILD_ID) {
+          setBuildMismatch(true);
+        }
+      } catch {
+        /* 版本接口不可用时不做提示 */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   /** 点击通知：先标记已读（本地即时生效 + 刷新未读数），有 link 再跳转 */
   const handleNotificationClick = async (n: NotificationItem) => {
@@ -168,7 +189,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   };
 
   return (
-    <Layout style={{ minHeight: "100vh" }}>
+    // data-build：真机探针据此断言"页面跑的是哪个构建"（A2）
+    <Layout style={{ minHeight: "100vh" }} data-build={BUILD_ID}>
       <Sider
         width={220}
         style={{ position: "sticky", top: 0, height: "100vh", overflow: "hidden" }}
@@ -211,6 +233,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <Button block icon={<LogoutOutlined />} onClick={handleLogout}>
             退出登录
           </Button>
+          {/* 构建标识常驻显示（A2）：用户/探针可一眼确认"跑的是不是最新构建" */}
+          <div
+            data-testid="build-id"
+            style={{ marginTop: 10, color: "rgba(255,255,255,0.45)", fontSize: 11, wordBreak: "break-all" }}
+          >
+            v{APP_VERSION} · {BUILD_ID}
+          </div>
         </div>
         </div>
       </Sider>
@@ -226,6 +255,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             justifyContent: "flex-end",
           }}
         >
+          {/* 前后端构建不一致提示（A2）：不阻塞使用，只提示"可能跑的不是同一版" */}
+          {buildMismatch && (
+            <Tag color="warning" style={{ marginRight: 12 }} data-testid="build-mismatch">
+              前后端版本不一致
+            </Tag>
+          )}
           {/* 通知中心改用 Drawer（右侧抽屉）：
               antd 5.29 + @rc-component/trigger 2.3 的 Popover 在此环境下会把纵向对齐算成
               -1000vh，弹层被放到视口外（真机探针实测 top=-1000vh、可见比例 0），

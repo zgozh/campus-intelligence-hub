@@ -99,6 +99,10 @@ services:
       - ALLOWED_HEADERS=Content-Type,Authorization,X-Requested-With,Accept
       - LOG_LEVEL=INFO
       - SCRAPLING_SERVICE_URL=http://scrapling-service:8001
+      # 构建标识（A2）：与前端构建参数同源，供 GET /api/v1/version 返回与前端比对
+      - APP_BUILD=${APP_BUILD:-}
+      - APP_VERSION=${APP_VERSION:-2.2.0}
+      - APP_ENVIRONMENT=${APP_ENVIRONMENT:-development}
     volumes:
       - backend-data:/app/data
     depends_on:
@@ -126,6 +130,10 @@ services:
       dockerfile: Dockerfile
       args:
         BACKEND_PROXY_TARGET: http://backend:8000
+        # 构建标识（A2）：与后端 APP_BUILD 同一个值，前端写入 NEXT_PUBLIC_BUILD_ID
+        APP_BUILD: ${APP_BUILD:-}
+        APP_VERSION: ${APP_VERSION:-2.2.0}
+        APP_ENVIRONMENT: ${APP_ENVIRONMENT:-development}
     container_name: campus-frontend
     ports:
       - "3000:3000"

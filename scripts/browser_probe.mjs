@@ -133,6 +133,8 @@ const ELEMENT_INFO_EXPR = `(() => {
     rect: { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) },
     pointerEvents: cs.pointerEvents, visibility: cs.visibility, opacity: cs.opacity,
     disabled: el.disabled === true || el.getAttribute('aria-disabled') === 'true',
+    // 元素属性：便于断言 data-* 标记（如构建标识 data-build）
+    attrs: Object.fromEntries(Array.from(el.attributes).map((a) => [a.name, String(a.value).slice(0, 80)])),
     hitTestIsSelfOrChild: !!top && (top === el || el.contains(top)),
     hitTestTag: top ? (top.tagName + '.' + String(top.className || '').slice(0, 60)) : null,
   };
