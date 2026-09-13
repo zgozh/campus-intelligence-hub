@@ -110,12 +110,14 @@ async def test_register_first_admin(public_client):
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    reason="展示项目有意放开：auth.py 在 admin_count>0 时创建普通 admin（可注册多个管理员）；"
-    "原「仅允许首个管理员」的安全预期不再成立，保留断言以记录该偏离",
-    strict=False,
-)
-async def test_register_second_admin_fails(public_client):
+async def test_register_second_admin_behaviour_by_mode(public_client, monkeypatch):
+    """C1：注册第二个管理员的行为由 DEMO_RELAX_AUTH 决定（默认演示模式放行）。
+
+    原用例断言"第二个管理员必须 403"——那是演示项目被有意放开前的安全预期，
+    现在改为按模式断言，不再用 xfail 挂着（生产模式必须 403）。
+    """
+    from config import settings
+
     await public_client.post(
         "/api/admin/register",
         json={
@@ -133,7 +135,23 @@ async def test_register_second_admin_fails(public_client):
             "name": "Second Admin",
         },
     )
-    assert response.status_code == 403
+    # 默认（演示模式）：保持开箱即用，允许注册普通管理员
+    assert settings.demo_relax_auth is True
+    assert response.status_code == 200
+    assert response.json()["admin"]["role"] == "admin"
+
+    # 生产模式：自助注册关闭
+    monkeypatch.setattr(settings, "demo_relax_auth", False, raising=False)
+    third = await public_client.post(
+        "/api/admin/register",
+        json={
+            "email": "third@example.com",
+            "password": "testpassword123",
+            "name": "Third Admin",
+        },
+    )
+    assert third.status_code == 403
+    assert "注册已关闭" in third.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -285,17 +303,18 @@ async def test_update_admin_to_readonly_is_rejected(client):
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    reason="展示项目有意放开：auth.py L157 注释「所有已登录账号均可用用户管理，不再限制 super_admin」，"
-    "support 角色因此可管理用户；保留断言以记录该安全偏离（生产部署应重新收紧）",
-    strict=False,
-)
-async def test_support_cannot_manage_users(support_client):
-    # List users
-    list_response = await support_client.get("/api/admin/users")
-    assert list_response.status_code == 403
+async def test_support_cannot_manage_users(support_client, monkeypatch):
+    """C1：support 角色能否管理用户由 DEMO_RELAX_AUTH 决定（生产模式必须 403）。"""
+    from config import settings
 
-    # Create user
+    # 演示模式（当前默认）：support 可用用户管理（原行为）
+    assert settings.demo_relax_auth is True
+    assert (await support_client.get("/api/admin/users")).status_code == 200
+
+    # 生产模式：恢复 super_admin 校验
+    monkeypatch.setattr(settings, "demo_relax_auth", False, raising=False)
+    assert (await support_client.get("/api/admin/users")).status_code == 403
+
     create_response = await support_client.post(
         "/api/admin/users",
         json={

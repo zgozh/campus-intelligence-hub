@@ -217,6 +217,14 @@ class Settings(BaseSettings):
     # 采集链路是否强制 SSRF 校验（所有列表页/详情页 URL 必须过 url_safety）
     campus_collect_ssrf_check: bool = True
 
+    # 鉴权放宽开关（REFACTOR_PLAN_V2_2 C1）
+    # True（默认，演示模式）：register 在已有管理员时仍可注册普通管理员；
+    #   require_super_admin 放行所有已登录账号 —— 保证"开箱即用、无 Key 可演示"。
+    # False（生产模式）：register 仅允许 bootstrap 首个管理员（其后 403）；
+    #   require_super_admin 恢复真实校验（非 super_admin → 403）。
+    # ⚠️ 对外部署请在 .env 或 compose 中显式设为 false。
+    demo_relax_auth: bool = True
+
     def model_post_init(self, __context) -> None:
         secret_key_file = self.secret_key_file.strip() or "/app/data/.secret_key"
         object.__setattr__(self, "secret_key_file", secret_key_file)

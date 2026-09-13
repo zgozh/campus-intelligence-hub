@@ -46,6 +46,13 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("数据库初始化完成")
 
+    # 迁移执行器（C3）：create_all 不会 ALTER 既有表，升级库必须靠这里补差量。
+    # fail fast：迁移失败直接让启动失败，避免"带病启动"（幂等保证重启重试安全）。
+    from services.migration_runner import run_migrations
+
+    migration_stats = await run_migrations()
+    logger.info("迁移检查完成：%s", migration_stats)
+
     # 崩溃恢复：上一次进程若在闭环运行中被重启，run_records 会残留 status=running，
     # 而互斥检查会因此拒绝后续所有闭环运行（409）直到 30 分钟超时。
     # 启动瞬间不可能有本实例正在跑的运行，故统一结算为 error（单实例部署前提）。

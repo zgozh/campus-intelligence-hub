@@ -17,6 +17,7 @@ from services.auth_service import (
     AdminDeactivatedError,
 )
 from i18n.core import get_locale_from_request, _
+from config import settings
 
 import time
 from collections import defaultdict, deque
@@ -154,7 +155,19 @@ VALID_ADMIN_ROLES = {"super_admin", "admin", "support"}
 
 
 def require_super_admin(current_admin: AdminUser):
-    # 展示项目：所有已登录账号均可用用户管理，不再限制 super_admin
+    """super_admin 权限校验（REFACTOR_PLAN_V2_2 C1）。
+
+    - 演示模式（settings.demo_relax_auth=True，默认）：放行所有已登录账号，
+      保证"开箱即用、无 Key 可演示"不受影响（原行为）。
+    - 生产模式（显式设为 false）：恢复真实校验，非 super_admin 一律 403。
+    """
+    if settings.demo_relax_auth:
+        return current_admin
+    if getattr(current_admin, "role", None) != "super_admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions",
+        )
     return current_admin
 
 
@@ -231,6 +244,12 @@ async def register(
             )
 
         if admin_count > 0:
+            # 生产模式（C1）：已有管理员后关闭自助注册，账号只能由管理员创建
+            if not settings.demo_relax_auth:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="注册已关闭，请联系管理员创建账号",
+                )
             # 系统已初始化：注册普通管理员，加入默认工作空间
             default_admin = (
                 await db.execute(select(AdminUser).order_by(AdminUser.id).limit(1))
