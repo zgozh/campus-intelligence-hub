@@ -6,6 +6,8 @@
 
 **一句话定位**：让校务信息**自动更新、可信可查、AI 可用**的一站式知识中台 —— 不是聊天机器人，而是"校务知识的自动化数据中心"。
 
+**部署前提**：**不需要下载任何本地模型、不需要 GPU、不需要 Ollama** —— 生成、向量化、精排全部走云端 HTTP API。唯一的模型依赖是**一个 `DASHSCOPE_API_KEY`**；连它也可以不填，系统会自动 Mock 降级，全链路仍可演示。详见[模型依赖](#模型依赖只需要一个-key不下载任何本地模型)。
+
 ---
 
 ## 目录
@@ -47,7 +49,7 @@
 | **自动采集** | 数据源管理、同域自动发现、AI 智能推荐（LLM 评估价值/分类/建议频率）、**栏目动态发现**、**时间范围筛选**、仅采新内容、抓取礼貌（请求间隔可配）与 SSRF 校验 |
 | **变化感知** | 内容指纹去重 + 版本管理 + **变更雷达**（TITLE/CONTENT/DATE_CHANGED + 高/中/低）+ 行级 Diff 高亮 |
 | **知识治理** | 自动分类/字段抽取/有效期、权威度与新鲜度分级、审核队列 + **AI 审核助手**（摘要/风险/推荐动作）、冲突检测、发布/归档、**知识健康度**（公式公开） |
-| **可信问答** | 融合评分检索（语义+关键词+权威度+新鲜度+时效衰减）→ **gte-rerank-v2 精排** → 意图/部门路由 → GraphRAG 线索 → **证据引用 + Answer Guard 防幻觉拒答** |
+| **可信问答** | 融合评分检索（语义+关键词+权威度+新鲜度+时效衰减）→ **gte-rerank-v2 精排**（DashScope 云端 API，非本地模型）→ 意图/部门路由 → GraphRAG 线索 → **证据引用 + Answer Guard 防幻觉拒答** |
 | **知识图谱** | LLM 三元组抽取、力导向可视化（缩放/拖拽/节点详情/类型筛选）、**关系路径问答**（返回子图与路径） |
 | **自动化 Agent** | 三层 Agent 闭环（采集 → 知识治理 → 问答运营）、**运行配置面板**（Schema 驱动，可就地改参数）、**SSE 实时流式**执行、**决策时间线**（每步完成时刻+耗时，支持历史回放与取消） |
 | **运营与推送** | 校务快讯、AI 洞察报告、日报周报、巡检告警、**站内通知中心**（分类筛选 / 一键全部已读 / 点击跳转） |
@@ -58,9 +60,11 @@
 ```bash
 git clone git@github.com:zgozh/campus-intelligence-hub.git
 cd campus-intelligence-hub
-cp .env.example .env          # 可选：填入 DASHSCOPE_API_KEY（不填自动 Mock 降级，功能仍可演示）
+cp .env.example .env          # 唯一需要改的文件：填入 DASHSCOPE_API_KEY（不填也能跑，自动 Mock 降级）
 docker compose up -d --build  # 6 个容器：backend / frontend / postgres / qdrant / redis / scrapling
 ```
+
+> **整个部署只需要这一个 Key，不需要下载任何模型权重。**
 
 打开 <http://localhost:3000>，用默认管理员登录：
 
@@ -70,6 +74,23 @@ docker compose up -d --build  # 6 个容器：backend / frontend / postgres / qd
 ```
 
 > 首次构建约 3–8 分钟（拉取基础镜像 + 编译前端）。健康检查：`curl http://localhost:8000/health`。
+
+### 模型依赖：只需要一个 Key（不下载任何本地模型）
+
+本项目**不需要**下载 BGE / reranker 之类的任何模型权重，**不需要 GPU**，也**不需要 Ollama**。上面 6 个容器里没有模型服务，镜像里也没有推理运行时（`torch` / `transformers` / `sentence-transformers` / `FlagEmbedding` 全部未安装）。
+
+| 能力 | 由谁执行 | 形态 | 需要本地下载吗 |
+| --- | --- | --- | --- |
+| 生成 / 抽取 / 分类 / 摘要 / 洞察 / 审核建议 | DashScope `qwen-plus` | 云端 HTTP API | ❌ |
+| 向量化（语义检索、知识图谱） | DashScope `text-embedding-v3`（1024 维） | 云端 HTTP API | ❌ |
+| 检索结果精排 | DashScope `gte-rerank-v2` | 云端 HTTP API（专有 rerank 端点） | ❌ |
+| 网页抓取与正文抽取 | `campus-scrapling` 容器（curl_cffi + readability） | 本仓库自建的抓取微服务，不是模型 | ❌ |
+
+**唯一必填项就是 `DASHSCOPE_API_KEY`**（阿里云百炼，新账号有免费额度）。留空的后果不是"跑不起来"，而是自动 Mock 降级 —— 见下一节。
+
+> 代码与数据库里会出现 `BAAI/bge-m3`、`jina-embeddings-v3` 这样的字样，那是**模型名字符串**，不是本地权重：`BAAI/bge-m3` 用于按名字推断向量维度（`backend/services/qdrant_service.py:21`），也是 SiliconFlow 等**云端** OpenAI 兼容 embedding 服务托管的同名模型的 API 参数。校务主链路默认不使用它们。
+
+**一个例外（与本项目主链路无关）**：Basjoo 底座的「文件管理」页（`/files`，多租户 KB 文档管道）在做向量索引时，key 取自智能体设置里的 **embedding provider**（默认 `jina`，可选 `siliconflow`），**不读 `DASHSCOPE_API_KEY`**。不配它时该文档会以 embedding 失败落到 `error` 状态（可在文件列表看到原因），但**不影响采集 / 治理 / 问答 / 图谱 / 洞察 / 闭环等校务主链路**，也不影响下面三种取数方式中的任何一种。
 
 ## ⚠️ 首次部署后是零数据 —— 三种取数方式
 
@@ -102,12 +123,13 @@ docker compose exec -T backend python -m scripts.seed_demo
 
 ### 方式三：上传文件入库（无需外网）
 
-「知识对象 → 上传文件」支持 md / txt / pdf 等，由 LLM（或 Mock）识别标题、部门、有效期后建立知识对象。
+「知识对象 → 上传文件」支持 md / txt / pdf 等，由 LLM（或 Mock）识别标题、部门、有效期后建立知识对象 —— 这条路径只用到 `DASHSCOPE_API_KEY`，不填时走 Mock 抽取，同样能入库（向量部分自动降级为关键词检索）。
 
 ### 关于模型 Key
 
-- **不填 `DASHSCOPE_API_KEY`**：自动降级为 **Mock LLM**（后端日志出现 `Agent没有配置 API Key，使用Mock LLM服务`），采集 / 治理 / 图谱 / 闭环全链路仍可跑通，问答与洞察为确定性占位内容，但**证据引用与拒答逻辑依然生效** —— 适合断网或没有 Key 的演示。
-- **填了 Key**：走真实 `qwen-plus`（生成）+ `text-embedding-v3`（1024 维向量）+ `gte-rerank-v2`（精排），问答、洞察、图谱抽取均为真实模型输出。
+- **不填 `DASHSCOPE_API_KEY`**：自动降级为 **Mock LLM**（后端日志出现 `Agent没有配置 API Key，使用Mock LLM服务`），采集 / 治理 / 图谱 / 闭环全链路仍可跑通，问答与洞察为确定性占位内容，但**证据引用与拒答逻辑依然生效** —— 适合断网或没有 Key 的演示。此时语义检索自动退化为关键词检索，不会报错。
+- **填了 Key**：走真实 `qwen-plus`（生成）+ `text-embedding-v3`（1024 维向量）+ `gte-rerank-v2`（精排），问答、洞察、图谱抽取均为真实模型输出。**这三个都是 DashScope 的云端 API，不需要本地部署任何模型。**
+- 与"取数"无关：本节的 Key 只影响**内容质量**，不影响"有没有数据"；不填 Key 也能完成下面三种取数方式。
 
 ## 界面导览
 
@@ -214,7 +236,7 @@ curl -X POST http://localhost:8000/api/mcp -H 'Content-Type: application/json' \
 
 | 变量 | 说明 |
 | --- | --- |
-| `DASHSCOPE_API_KEY` | 阿里云百炼密钥（qwen-plus / text-embedding-v3 / gte-rerank-v2）。**留空自动 Mock 降级** |
+| `DASHSCOPE_API_KEY` | **唯一的模型 Key**（阿里云百炼），覆盖 `qwen-plus` / `text-embedding-v3` / `gte-rerank-v2` 三个**云端 API**。**留空自动 Mock 降级**；本项目无本地模型、无 GPU |
 | `APP_BUILD` / `APP_VERSION` / `APP_ENVIRONMENT` | 构建标识：后端 `/api/v1/version` 返回，前端显示并比对；用 `scripts/build_all.ps1` 自动注入 |
 | `DEMO_RELAX_AUTH` | `true`（默认，演示档）：可自助注册管理员、所有登录账号均可用户管理；`false`（生产档）：关闭自助注册、恢复 `super_admin` 严格校验 |
 | `DATABASE_URL` / `REDIS_URL` / `QDRANT_URL` | 连接串（compose 内已配好，一般无需修改） |
@@ -291,7 +313,7 @@ campus-intelligence-hub/
 预期现象，见[首次部署后是零数据](#️-首次部署后是零数据--三种取数方式)。最快路径是「导入演示数据」或「添加数据源 → 采集」。
 
 **Q2：不填模型 Key 能用吗？**
-能。无 Key 时自动使用 Mock LLM（确定性占位输出），采集 / 治理 / 图谱 / 闭环流程全部可跑；问答与洞察为占位内容，但**证据引用与拒答逻辑仍生效**。
+能。无 Key 时自动使用 Mock LLM（确定性占位输出），采集 / 治理 / 图谱 / 闭环流程全部可跑；问答与洞察为占位内容，但**证据引用与拒答逻辑仍生效**。本项目不需要本地模型，见[模型依赖](#模型依赖只需要一个-key不下载任何本地模型)。
 
 **Q3：页面打开了但点了没反应，或提示要登录？**
 先**硬刷新**（Ctrl+Shift+R）或关掉标签页重开 —— 重建镜像后旧标签页仍跑旧 bundle。左下角版本号应与 `GET /api/v1/version` 的 `build` 一致。
@@ -311,8 +333,14 @@ campus-intelligence-hub/
 **Q8：端口冲突？**
 默认 3000（前端）/ 8000（后端）/ 5432 / 6379 / 6333。改端口需同时调整 `docker-compose.yml` 与 nginx 配置。
 
+**Q9：需要下载 BGE / reranker 权重吗？要装 GPU 或 Ollama 吗？**
+都不需要。6 个容器里没有模型服务，镜像里也没有推理运行时；生成 / 向量化 / 精排分别走 DashScope 的 `qwen-plus` / `text-embedding-v3` / `gte-rerank-v2` **云端 API**。唯一要做的是在 `.env` 填一个 `DASHSCOPE_API_KEY`（留空则 Mock 降级）。代码与数据库里出现的 `BAAI/bge-m3`、`jina-embeddings-v3` 是**模型名字符串**（用于推断向量维度、以及对接云端 OpenAI 兼容 embedding 服务），不是本地权重。详见[模型依赖](#模型依赖只需要一个-key不下载任何本地模型)。
+
+**Q10：只填 `DASHSCOPE_API_KEY` 就够了吗？**
+校务主链路（采集 → 治理 → 问答 → 图谱 → 洞察 → 闭环）够用。唯一例外是 Basjoo 底座的「文件管理」`/files` 页：它的向量索引读的是智能体设置里的 embedding provider key（默认 `jina`，可选 `siliconflow`），不读 `DASHSCOPE_API_KEY`；不配也能上传，但文档索引会失败并显示原因。不用这个页面的话可以完全忽略。
+
 ## 技术栈与许可
 
-**技术栈**：FastAPI · 异步 SQLAlchemy · PostgreSQL(pgvector) · Qdrant · Redis · APScheduler · Scrapling（curl_cffi + readability）· Next.js 14 App Router · TypeScript · antd 5 · ECharts · react-markdown · DashScope（qwen-plus / text-embedding-v3 / gte-rerank-v2）· pytest · vitest + React Testing Library · 零依赖 CDP 真机验证脚本。
+**技术栈**：FastAPI · 异步 SQLAlchemy · PostgreSQL(pgvector) · Qdrant · Redis · APScheduler · Scrapling（curl_cffi + readability）· Next.js 14 App Router · TypeScript · antd 5 · ECharts · react-markdown · DashScope（qwen-plus / text-embedding-v3 / gte-rerank-v2，**全部走云端 API，无本地模型 / GPU / Ollama**）· pytest · vitest + React Testing Library · 零依赖 CDP 真机验证脚本。
 
 **许可**：见 [`LICENSE`](LICENSE)。底座复用 MIT 协议的 Basjoo，本项目在其之上做校务域二次开发（详见 [`OSS_REUSE.md`](OSS_REUSE.md)）。
