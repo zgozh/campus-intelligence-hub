@@ -6,7 +6,7 @@ import { ReloadOutlined } from '@ant-design/icons';
 import { api } from '../services/api';
 import type { ChangeEvent, ChangeDetail } from '../services/api';
 import DiffViewer from '../components/DiffViewer';
-import { stripInlineMd } from '../utils/format';
+import { formatDateTime, stripInlineMd } from '../utils/format';
 
 const { Title } = Typography;
 
@@ -20,14 +20,6 @@ const TYPE_ZH: Record<string, string> = {
 
 function severityZh(v: string): string {
   return v === 'HIGH' ? '高优先级' : v === 'MEDIUM' ? '中优先级' : '低优先级';
-}
-
-function formatTime(t?: string | null): string {
-  if (!t) return '';
-  const d = new Date(t);
-  return d.toLocaleString('zh-CN', {
-    month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
-  });
 }
 
 // 表格单元不适合渲染 markdown，统一走展示层清洗（stripInlineMd）
@@ -87,7 +79,7 @@ export default function Changes() {
         r.old_version != null ? `v${r.old_version} → v${r.new_version}` : '-',
     },
     { title: '变更摘要', dataIndex: 'diff_summary', ellipsis: true, render: (v: string | null) => stripInlineMd(v) },
-    { title: '时间', dataIndex: 'detected_at', width: 130, render: formatTime },
+    { title: '时间', dataIndex: 'detected_at', width: 180, render: (v: string | null) => formatDateTime(v) },
     {
       title: '操作',
       width: 110,

@@ -10,6 +10,7 @@ import HelpTooltip from '../components/HelpTooltip';
 import KBSetupGuard from '../components/KBSetupGuard';
 import { useIsMobile, useIsTablet } from '../hooks/useMediaQuery';
 import SourcesSummary from '../components/SourcesSummary';
+import { displayTitle, formatDateTime } from '../utils/format';
 
 interface TaskStatus {
   is_crawling: boolean;
@@ -1302,7 +1303,7 @@ export default function URLManagement() {
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
                           }}>
-                            {url.title}
+                            {displayTitle(url.title)}
                           </p>
                         )}
                         {url.last_fetch_at && (
@@ -1311,7 +1312,7 @@ export default function URLManagement() {
                             color: 'var(--color-text-muted)',
                             marginTop: 'var(--space-2)',
                           }}>
-                            {t('labels.urlManagement.lastFetch')}: {new Date(url.last_fetch_at).toLocaleString()}
+                            {t('labels.urlManagement.lastFetch')}: {formatDateTime(url.last_fetch_at)}
                           </p>
                         )}
                         {/* Indexing error display */}

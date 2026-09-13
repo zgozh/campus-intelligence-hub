@@ -50,7 +50,7 @@ import type {
   ClosedLoopRunItem,
   DecisionRun,
 } from "../services/api";
-import { displayTitle, formatDateTime, formatTime, statusColor } from "../utils/format";
+import { displayTitle, formatDateTime, formatTime, statusColor, stripInlineMd } from "../utils/format";
 import DecisionTimeline, { formatDuration } from "../components/DecisionTimeline";
 import RunConfigModal from "../components/RunConfigModal";
 
@@ -288,7 +288,8 @@ export default function ClosedLoop() {
           if (event === "run_error") {
             // 运行级错误：时间线内由 DecisionTimeline 用 Alert 持久展示，这里只做即时提示
             sawRunErrorRef.current = true;
-            message.error(typeof data.message === "string" ? data.message : "闭环运行异常");
+            // 行内即时提示：来源不可控（后端事件文案），清洗成纯文本
+            message.error(stripInlineMd(typeof data.message === "string" ? data.message : "闭环运行异常"));
           }
         },
         controller.signal,
@@ -456,12 +457,12 @@ export default function ClosedLoop() {
           showIcon
           closable
           onClose={() => setErrorText("")}
-          message={errorText}
+          message={stripInlineMd(errorText)}
           description={
             errorDetails.length > 0 ? (
               <Space direction="vertical" size={2}>
                 {errorDetails.map((line) => (
-                  <Text key={line} style={{ fontSize: 12 }}>{line}</Text>
+                  <Text key={line} style={{ fontSize: 12 }}>{stripInlineMd(line)}</Text>
                 ))}
               </Space>
             ) : undefined
@@ -476,7 +477,7 @@ export default function ClosedLoop() {
           showIcon
           closable
           onClose={() => setNotice("")}
-          message={notice}
+          message={stripInlineMd(notice)}
           style={{ marginBottom: 16 }}
         />
       ) : null}

@@ -10,6 +10,7 @@ import { MarkdownRenderer } from '../components/MarkdownRenderer'
 import { useIsMobile } from '../hooks/useMediaQuery'
 import { WS_BASE_URL } from '../lib/env'
 import { formatAssistantMessageContent } from '../utils/citations'
+import { displayTitle, formatDateTime } from '../utils/format'
 
 interface Session {
   id: string
@@ -252,16 +253,6 @@ export default function Sessions() {
     }
   }
 
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  }
-
   return (
     <AdminLayout>
       <div style={{
@@ -457,7 +448,7 @@ export default function Sessions() {
                       color: 'var(--color-text-muted)',
                       marginTop: 'var(--space-2)',
                     }}>
-                      {formatTime(session.updated_at || session.created_at)}
+                      {formatDateTime(session.updated_at || session.created_at)}
                     </div>
                   </div>
                 ))}
@@ -649,7 +640,7 @@ export default function Sessions() {
                                           rel="noopener noreferrer"
                                           style={{ color: 'inherit', textDecoration: 'underline', fontSize: 'var(--text-sm)', fontWeight: 600, wordBreak: 'break-word' }}
                                         >
-                                          {reference.title}
+                                          {displayTitle(reference.title)}
                                         </a>
                                       ))}
                                     </div>
@@ -663,7 +654,7 @@ export default function Sessions() {
                             opacity: 0.6,
                             marginTop: 'var(--space-2)',
                           }}>
-                            {formatTime(msg.created_at)}
+                            {formatDateTime(msg.created_at)}
                           </div>
                         </div>
                       </div>

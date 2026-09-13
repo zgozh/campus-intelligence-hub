@@ -27,20 +27,12 @@ import { useAuth } from "../context/AuthContext";
 import { api } from "../services/api";
 import type { NotificationItem } from "../services/api";
 import { displayTitle, formatDateTime } from "../utils/format";
+import { KIND_ZH_COMPACT } from "../utils/constants";
 
 const { Sider, Header, Content } = Layout;
 
 /** 未读数轮询间隔：30s（需求 T11-5） */
 const UNREAD_POLL_MS = 30000;
-
-/** 通知分类中文名（与通知中心页保持一致） */
-const KIND_ZH: Record<string, string> = {
-  brief: "快讯",
-  insight: "洞察",
-  alert: "告警",
-  expiring: "临期",
-  system: "系统",
-};
 
 const MENU_ITEMS = [
   { key: "/overview", icon: <FundOutlined />, i18nKey: "navigation.overview" },
@@ -332,7 +324,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     <List.Item.Meta
                       title={
                         <span style={{ fontWeight: n.read ? 400 : 600 }}>
-                          <Tag color={n.read ? "default" : "blue"}>{KIND_ZH[n.kind] || n.kind}</Tag>
+                          <Tag color={n.read ? "default" : "blue"}>{KIND_ZH_COMPACT[n.kind] || n.kind}</Tag>
                           {displayTitle(n.title, 30)}
                         </span>
                       }

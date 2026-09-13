@@ -5,6 +5,7 @@ import { Card, Col, Row, Space, Steps, Tag, Typography, Empty } from 'antd';
 import { ClockCircleOutlined, SyncOutlined } from '@ant-design/icons';
 import { api } from '../services/api';
 import type { CollectionJob } from '../services/api';
+import { formatDateTime } from '../utils/format';
 
 const { Title, Text } = Typography;
 
@@ -25,10 +26,6 @@ function act(trace?: Record<string, string> | null): number {
   }
   const okCount = STAGES.filter((s) => st(trace, s) === 'ok').length;
   return okCount === STAGES.length ? STAGES.length : Math.min(okCount, STAGES.length);
-}
-
-function fmtTime(v?: string | null) {
-  return v ? new Date(v).toLocaleString() : '-';
 }
 
 // 采集结果后端新增字段（接口类型尚未声明，按可选补充）
@@ -103,7 +100,7 @@ export default function Jobs() {
                 {j.error_message && <div style={{ color: '#ff4d4f', fontSize: 12, marginBottom: 6 }}>{j.error_message}</div>}
 
                 <div style={{ color: '#999', fontSize: 12 }}>
-                  <ClockCircleOutlined style={{ marginRight: 4 }} />开始 {fmtTime(j.started_at)} · 结束 {fmtTime(j.completed_at)}
+                  <ClockCircleOutlined style={{ marginRight: 4 }} />开始 {formatDateTime(j.started_at) || '-'} · 结束 {formatDateTime(j.completed_at) || '-'}
                 </div>
               </Card>
             </Col>

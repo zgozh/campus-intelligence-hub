@@ -2,6 +2,7 @@
 
 import { Card, Tag, Typography, Space, Divider, Skeleton } from 'antd';
 import type { ChangeDetail } from '../services/api';
+import { formatDateTime, stripInlineMd } from '../utils/format';
 
 const { Text } = Typography;
 
@@ -21,12 +22,6 @@ function severityZh(v: string): string {
   return v === 'HIGH' ? '高优先级' : v === 'MEDIUM' ? '中优先级' : '低优先级';
 }
 
-function formatTime(t?: string | null): string {
-  if (!t) return '';
-  const d = new Date(t);
-  return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
-}
-
 export default function DiffViewer({ detail }: { detail: ChangeDetail | null }) {
   if (!detail) {
     return <Skeleton active paragraph={{ rows: 8 }} />;
@@ -43,21 +38,21 @@ export default function DiffViewer({ detail }: { detail: ChangeDetail | null }) 
         {detail.old_version != null && (
           <Text type="secondary">v{detail.old_version} → v{detail.new_version}</Text>
         )}
-        <Text type="secondary">{formatTime(detail.detected_at)}</Text>
+        <Text type="secondary">{formatDateTime(detail.detected_at)}</Text>
       </Space>
 
       {detail.diff_summary && (
-        <Text strong style={{ display: 'block', marginBottom: 16 }}>{detail.diff_summary}</Text>
+        <Text strong style={{ display: 'block', marginBottom: 16 }}>{stripInlineMd(detail.diff_summary)}</Text>
       )}
 
       {(detail.title_before || detail.title_after) && (
         <div style={{ marginBottom: 16, wordBreak: 'break-word' }}>
           <Text type="secondary">标题：</Text>
           {detail.title_before && (
-            <Text delete style={{ color: '#cf1322', marginRight: 8 }}>{detail.title_before}</Text>
+            <Text delete style={{ color: '#cf1322', marginRight: 8 }}>{stripInlineMd(detail.title_before)}</Text>
           )}
           {detail.title_after && (
-            <Text style={{ color: '#237804' }}>{detail.title_after}</Text>
+            <Text style={{ color: '#237804' }}>{stripInlineMd(detail.title_after)}</Text>
           )}
         </div>
       )}

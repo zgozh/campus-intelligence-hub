@@ -9,6 +9,7 @@ import AdminLayout from "../components/AdminLayout";
 import KBSetupGuard from "../components/KBSetupGuard";
 import { useIsMobile } from "../hooks/useMediaQuery";
 import SourcesSummary from "../components/SourcesSummary";
+import { formatDateTime } from "../utils/format";
 
 interface TaskStatus {
 	is_crawling: boolean;
@@ -864,9 +865,9 @@ export default function FileUploadManagement() {
 																		color: "var(--color-text-muted)",
 																	}}
 																>
-																	{new Date(
+																	{formatDateTime(
 																		file.created_at,
-																	).toLocaleDateString()}
+																	)}
 																</span>
 															</div>
 															{/* Error message display for failed files */}

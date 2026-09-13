@@ -7,7 +7,7 @@ import { CompassOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons
 import { api } from '../services/api';
 import type { BriefResult, CampusSource, RecommendResult, SourceColumn, SourceMonitor } from '../services/api';
 import DashboardMarkdown from '../components/DashboardMarkdown';
-import { displayTitle, formatDateTime, formatTime } from '../utils/format';
+import { displayTitle, formatDateTime, formatTime, statusColor } from '../utils/format';
 
 const { Title } = Typography;
 
@@ -64,12 +64,6 @@ function recentTitlesLabel(titles: string[]): string {
   if (!titles.length) return '近 7 天暂无新内容';
   return titles.slice(0, 2).map((t) => displayTitle(t, 30)).join(' / ');
 }
-
-const statusColor: Record<string, string> = {
-  active: 'green',
-  paused: 'orange',
-  error: 'red',
-};
 
 const PAGE_OPTIONS = [
   { value: 1, label: '1 页（仅最新）' },
@@ -326,7 +320,7 @@ export default function Sources() {
       title: '状态',
       dataIndex: 'status',
       width: 90,
-      render: (s: string) => <Tag color={statusColor[s] || 'default'}>{s}</Tag>,
+      render: (s: string) => <Tag color={statusColor(s)}>{s}</Tag>,
     },
     {
       // 与监控卡片统一：last_success_at ?? last_crawled_at（T13-6）

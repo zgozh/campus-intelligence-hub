@@ -10,6 +10,34 @@
  *
  * 本文件把「时间格式化」与「行内 Markdown 清洗」收敛到一处，供全站展示层复用。
  * 约定：非法输入原样返回，绝不返回 "Invalid Date"。
+ *
+ * ============================ 展示层判定规则（冻结，不得绕过） ============================
+ * 【一】清洗成纯文本 —— 用 `displayTitle`（清洗 + 截断）或 `stripInlineMd`（仅清洗）
+ *   适用：一切「标题类」内容。特征 = 来源不可控 + 行内展示 + 空间有限：
+ *     - 列表/表格单元格标题、卡片标题；
+ *     - 引用（citation）的 title / summary；
+ *     - Drawer / Modal 标题；
+ *     - `Alert` 的 message（含 description 里的短文案）；
+ *     - Tooltip 文案。
+ *   理由：这些位置渲染 Markdown 会排版崩坏（多行/列表撑破行高），并扩大注入面。
+ *   选择口径：需要控制长度用 `displayTitle`（默认 maxLen 40，表格/卡片按需显式传参）；
+ *   内容需要完整保留（如引用摘要）用 `stripInlineMd`，只去标记不截断。
+ * 【二】渲染 Markdown —— 用 `src/components/DashboardMarkdown.tsx`
+ *   适用：一切「正文类」内容（来源可以是 LLM 或站点原文）：
+ *     - 快讯 / 洞察 / 日报正文；
+ *     - 问答回答（AskAI assistant 消息）；
+ *     - 会话与聊天消息里助手/系统的长文；
+ *     - 知识对象正文内容区；闭环运行 summary。
+ *   ⚠️ `DashboardMarkdown` 必须保持禁用 raw HTML（react-markdown 默认不渲染 HTML），
+ *      严禁引入 `rehype-raw`。
+ *   例外（已记录在实现记录里）：聊天主题容器（深色渐变气泡）内的消息正文继续用
+ *   `MarkdownRenderer`——它同样禁用 raw HTML，只是取色走 Chat 主题 CSS 变量；
+ *   换成 `DashboardMarkdown` 的固定浅色内联样式会在深色气泡上不可读。
+ * 【三】时间一律走本文件
+ *   日期 + 时刻用 `formatDateTime`（`YYYY-MM-DD HH:mm:ss`）；只展示时刻用 `formatTime`（`HH:mm:ss`）。
+ *   禁止任何组件内自行 `new Date(x).toLocaleString()/toLocaleDateString()`，也禁止再写
+ *   本地 `fmtTime`/`formatTime` 之类的小工具（同名本地实现会遮蔽本出口，迟早漂移）。
+ * =====================================================================================
  */
 
 /** 数字补零到两位 */

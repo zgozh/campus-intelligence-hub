@@ -4,6 +4,7 @@ import { useRef, useEffect, memo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { Source, UsageInfo } from "../services/api";
 import { formatAssistantMessageContent } from "../utils/citations";
+import { stripInlineMd } from "../utils/format";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 
 export interface Message {
@@ -142,7 +143,7 @@ function ReferenceList({
 							wordBreak: "break-word",
 						}}
 					>
-						{reference.title}
+						{stripInlineMd(reference.title)}
 					</a>
 				))}
 			</div>

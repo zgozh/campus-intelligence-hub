@@ -6,6 +6,7 @@ import { ClearOutlined, SendOutlined } from '@ant-design/icons';
 import { api } from '../services/api';
 import type { AskResponse } from '../services/api';
 import DashboardMarkdown from '../components/DashboardMarkdown';
+import { displayTitle, stripInlineMd } from '../utils/format';
 
 interface ChatMessage {
   id: string;
@@ -153,7 +154,7 @@ export default function AskAI() {
                           label: `来源引用（${m.citations.length}）`,
                           children: m.citations.map((c, i) => (
                             <div key={i} style={{ marginBottom: 8, padding: 10, background: '#fafafa', borderRadius: 6 }}>
-                              <div style={{ fontWeight: 600 }}>[{i + 1}] {c.title}</div>
+                              <div style={{ fontWeight: 600 }}>[{i + 1}] {displayTitle(c.title, 60)}</div>
                               <div style={{ color: '#999', fontSize: 12, margin: '6px 0' }}>
                                 <Tag>{c.type}</Tag>
                                 <Tag color={c.freshness === 'Fresh' ? 'green' : c.freshness === 'Aging' ? 'orange' : c.freshness === 'Stale' ? 'red' : 'default'}>
@@ -165,7 +166,8 @@ export default function AskAI() {
                                 {c.version != null && <> · v{c.version}</>}
                               </div>
                               {c.summary && (
-                                <div style={{ fontSize: 13, color: '#666', lineHeight: 1.6, marginBottom: 6 }}>{c.summary}</div>
+                                // 引用摘要属行内展示：清洗成纯文本（不截断，保留完整信息）
+                                <div style={{ fontSize: 13, color: '#666', lineHeight: 1.6, marginBottom: 6 }}>{stripInlineMd(c.summary)}</div>
                               )}
                               {c.url && (
                                 <a href={c.url} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>

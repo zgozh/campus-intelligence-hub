@@ -5,6 +5,8 @@ import { Button, Descriptions, Drawer, Form, Input, Modal, Popconfirm, Select, S
 import { InboxOutlined, PlusOutlined, SwapRightOutlined, UploadOutlined } from '@ant-design/icons';
 import { api } from '../services/api';
 import type { KnowledgeObject } from '../services/api';
+import DashboardMarkdown from '../components/DashboardMarkdown';
+import { displayTitle } from '../utils/format';
 
 const { Title } = Typography;
 
@@ -100,7 +102,8 @@ export default function KnowledgeObjects() {
 
   const columns = [
     { title: '类型', dataIndex: 'type', width: 110, sorter: (a: KnowledgeObject, b: KnowledgeObject) => (typeZh[a.type] || a.type).localeCompare(typeZh[b.type] || b.type), render: (t: string) => typeZh[t] || t },
-    { title: '标题', dataIndex: 'title', ellipsis: true },
+    // 表格单元格 = 行内展示且空间有限：标题类一律清洗（displayTitle），不渲染 Markdown
+    { title: '标题', dataIndex: 'title', ellipsis: true, render: (v: string | null) => displayTitle(v) },
     { title: '状态', dataIndex: 'status', width: 100, sorter: (a: KnowledgeObject, b: KnowledgeObject) => (a.status || '').localeCompare(b.status || ''), render: (s: string) => (
       <Tooltip title={s === 'ARCHIVED' ? '已归档，不参与 AI 检索/引用' : s === 'EXPIRED' ? '已过期，默认不参与检索' : undefined}>
         <Tag color={statusColor[s] || 'default'}>{statusZh[s] || s}</Tag>
@@ -153,7 +156,7 @@ export default function KnowledgeObjects() {
         rowSelection={{ selectedRowKeys, onChange: setSelectedRowKeys }}
       />
 
-      <Drawer title={selected?.title} open={!!selected} onClose={() => setSelected(null)} width={720}>
+      <Drawer title={displayTitle(selected?.title)} open={!!selected} onClose={() => setSelected(null)} width={720}>
         {selected && (
           <>
             <Descriptions column={1} bordered size="small">
@@ -167,7 +170,10 @@ export default function KnowledgeObjects() {
             </Descriptions>
             <div style={{ marginTop: 16 }}>
               <div style={{ fontWeight: 600, marginBottom: 8 }}>正文</div>
-              <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.8, fontSize: 14 }}>{selected.content || selected.summary || '暂无正文'}</div>
+              {/* 正文类内容：LLM/站点原文都可能带 Markdown，按规则渲染（禁用 raw HTML） */}
+              <div style={{ lineHeight: 1.8, fontSize: 14 }}>
+                <DashboardMarkdown content={selected.content || selected.summary || '暂无正文'} />
+              </div>
             </div>
             {selected.source_url && (<div style={{ marginTop: 16 }}><a href={selected.source_url} target="_blank" rel="noreferrer">查看官网原文 ↗</a></div>)}
           </>

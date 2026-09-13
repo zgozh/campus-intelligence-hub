@@ -8,9 +8,9 @@ import { api } from "../services/api";
 import type { NotificationItem } from "../services/api";
 import DashboardMarkdown from "../components/DashboardMarkdown";
 import { displayTitle, formatDateTime } from "../utils/format";
+import { KIND_ZH } from "../utils/constants";
 
 const { Title, Text } = Typography;
-const KIND_ZH: Record<string, string> = { brief: "校务快讯", insight: "校务洞察", alert: "告警", expiring: "临期提醒", system: "系统" };
 
 /** 分类筛选：全部 + 后端支持的四类业务通知（T11-7） */
 const KIND_TABS: { key: string; label: string }[] = [
