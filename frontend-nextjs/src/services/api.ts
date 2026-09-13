@@ -217,32 +217,110 @@ export interface AgentCreateInput {
 	welcome_message?: string;
 }
 
-export async function parseErrorResponse(response: Response): Promise<string> {
-	const contentType = (
-		response.headers.get("content-type") || ""
-	).toLowerCase();
+function asRecord(value: unknown): Record<string, unknown> | null {
+	return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
 
+/** 读取错误响应体：一次性解析出「人类可读文案 + 原始 detail + 完整 payload」（B1） */
+export async function readErrorResponse(
+	response: Response,
+): Promise<{ message: string; detail: unknown; payload: unknown }> {
+	const contentType = (response.headers.get("content-type") || "").toLowerCase();
+	let payload: unknown = null;
 	if (contentType.includes("application/json")) {
-		const data = await response.json().catch(() => null);
-		if (data?.detail) {
-			if (typeof data.detail === "string") return data.detail;
-			if (Array.isArray(data.detail)) {
-				const messages = data.detail
-					.map((e: { msg?: string; message?: string }) => e.msg || e.message)
-					.filter(Boolean);
-				if (messages.length) return messages.join("; ");
-			}
-			return JSON.stringify(data.detail);
-		}
-		if (data?.message) return data.message;
+		payload = await response.json().catch(() => null);
+	} else {
+		payload = await response.text().catch(() => "");
 	}
 
-	const text = await response.text().catch(() => "");
-	const statusLabel = `${response.status} ${response.statusText || "Request failed"}`;
-	if (text.trim()) {
-		return `${statusLabel}: ${text.trim().slice(0, 500)}`;
+	const record = asRecord(payload);
+	let message: string | undefined;
+	if (record) {
+		if (typeof record.detail === "string") {
+			message = record.detail;
+		} else if (Array.isArray(record.detail)) {
+			const messages = (record.detail as unknown[])
+				.map((item) => {
+					const e = asRecord(item);
+					if (!e) return "";
+					if (typeof e.msg === "string") return e.msg;
+					if (typeof e.message === "string") return e.message;
+					return "";
+				})
+				.filter(Boolean);
+			message = messages.length ? messages.join("; ") : JSON.stringify(record.detail);
+		} else if (record.detail) {
+			message = JSON.stringify(record.detail);
+		} else if (typeof record.message === "string") {
+			message = record.message;
+		}
 	}
-	return statusLabel;
+	if (!message) {
+		const text = typeof payload === "string" ? payload.trim() : "";
+		const statusLabel = `${response.status} ${response.statusText || "Request failed"}`;
+		message = text ? `${statusLabel}: ${text.slice(0, 500)}` : statusLabel;
+	}
+	const detail = record && "detail" in record ? record.detail : undefined;
+	return { message, detail, payload };
+}
+
+/**
+ * 结构化 API 错误（REFACTOR_PLAN_V2_2 B1）
+ *
+ * 既有代码只消费 `.message`（字符串），因此 `.message` 与改造前逐字一致，零改动兼容；
+ * 新增 `status`/`detail`/`payload` 与便捷访问器 `runId`/`fieldErrors`，让调用方能按状态码
+ * 与字段定位问题，而不是靠字符串猜。
+ */
+export class ApiError extends Error {
+	readonly status: number;
+	readonly detail: unknown;
+	readonly payload: unknown;
+	readonly endpoint: string;
+
+	constructor(params: {
+		message: string;
+		status: number;
+		detail?: unknown;
+		payload?: unknown;
+		endpoint?: string;
+	}) {
+		super(params.message);
+		this.name = "ApiError";
+		this.status = params.status;
+		this.detail = params.detail;
+		this.payload = params.payload;
+		this.endpoint = params.endpoint ?? "";
+		// 兼容按 ES5 目标转译时的 instanceof 判定
+		Object.setPrototypeOf(this, ApiError.prototype);
+	}
+
+	/** 409「已有进行中的闭环运行」时后端在响应体顶层给出的 run_id */
+	get runId(): string | undefined {
+		const fromPayload = asRecord(this.payload)?.run_id;
+		if (typeof fromPayload === "string") return fromPayload;
+		const fromDetail = asRecord(this.detail)?.run_id;
+		return typeof fromDetail === "string" ? fromDetail : undefined;
+	}
+
+	/** 422 字段级校验错误（后端 detail 形如 [{field, message}]） */
+	get fieldErrors(): { field: string; message: string }[] {
+		if (!Array.isArray(this.detail)) return [];
+		const out: { field: string; message: string }[] = [];
+		for (const item of this.detail as unknown[]) {
+			const e = asRecord(item);
+			if (!e) continue;
+			const field = e.field;
+			const msg = typeof e.message === "string" ? e.message : e.msg;
+			if (typeof field === "string" && typeof msg === "string") {
+				out.push({ field, message: msg });
+			}
+		}
+		return out;
+	}
+}
+
+export async function parseErrorResponse(response: Response): Promise<string> {
+	return (await readErrorResponse(response)).message;
 }
 
 /**
@@ -340,13 +418,20 @@ class APIService {
 		});
 
 		if (!response.ok) {
-			const errorMessage = await parseErrorResponse(response);
-			console.error(`API Error: ${errorMessage}`, {
+			// B1：抛结构化 ApiError（.message 与改造前一致，兼容既有 catch 方）
+			const { message, detail, payload } = await readErrorResponse(response);
+			console.error(`API Error: ${message}`, {
 				status: response.status,
 				endpoint,
 				url,
 			});
-			throw new Error(errorMessage);
+			throw new ApiError({
+				message,
+				status: response.status,
+				detail,
+				payload,
+				endpoint,
+			});
 		}
 
 		// Handle 204 No Content
@@ -431,8 +516,14 @@ class APIService {
 		});
 
 		if (!response.ok) {
-			const message = await parseErrorResponse(response);
-			throw new Error(message || "Stream request failed");
+			const { message, detail, payload } = await readErrorResponse(response);
+			throw new ApiError({
+				message: message || "Stream request failed",
+				status: response.status,
+				detail,
+				payload,
+				endpoint: "/api/v1/chat/stream",
+			});
 		}
 
 		if (!response.body) {
@@ -874,8 +965,8 @@ class APIService {
 		});
 
 		if (!response.ok) {
-			const errorMessage = await parseErrorResponse(response);
-			throw new Error(errorMessage);
+			const { message, detail, payload } = await readErrorResponse(response);
+			throw new ApiError({ message, status: response.status, detail, payload });
 		}
 
 		return response.json();
@@ -1277,7 +1368,7 @@ class APIService {
 		config: ClosedLoopConfig,
 		onEvent: (event: ClosedLoopEventName, data: ClosedLoopEventData) => void,
 		signal?: AbortSignal,
-	): Promise<{ run_id: string; status: string }> {
+	): Promise<StreamClosedLoopResult> {
 		const url = new URL(`${this.baseUrl}/api/v1/closed-loop/stream`, window.location.origin);
 		url.searchParams.set("locale", this.getLocale());
 		const token = localStorage.getItem("token");
@@ -1293,7 +1384,15 @@ class APIService {
 		});
 
 		if (!response.ok) {
-			throw new Error(await parseErrorResponse(response));
+			// B1：409（已有进行中的运行）/422（字段校验）都保留结构化信息，调用方不再靠字符串猜
+			const { message, detail, payload } = await readErrorResponse(response);
+			throw new ApiError({
+				message,
+				status: response.status,
+				detail,
+				payload,
+				endpoint: "/api/v1/closed-loop/stream",
+			});
 		}
 		if (!response.body) {
 			throw new Error("当前浏览器不支持流式响应");
@@ -1303,7 +1402,10 @@ class APIService {
 		const decoder = new TextDecoder();
 		let buffer = "";
 		let runId = "";
-		let status = "ok";
+		let status: ClosedLoopRunStatus = "ok";
+		let summary: string | null = null;
+		// B5：终态归一化——不再让 run_error 之后仍 resolve 成"成功"
+		let terminal: StreamClosedLoopTerminal = "interrupted";
 
 		for (;;) {
 			const { value, done } = await reader.read();
@@ -1320,15 +1422,23 @@ class APIService {
 					if (event === "run_started" && typeof data.run_id === "string") {
 						runId = data.run_id;
 					}
-					if (event === "run_finished" && typeof data.status === "string") {
-						status = data.status;
+					if (event === "run_finished") {
+						terminal = "run_finished";
+						if (typeof data.status === "string") status = data.status as ClosedLoopRunStatus;
+						summary = typeof data.summary === "string" ? data.summary : null;
+					}
+					if (event === "run_error") {
+						terminal = "run_error";
+						status = "error";
+						summary = null;
 					}
 					onEvent(event, data);
 				}
 				boundary = buffer.indexOf("\n\n");
 			}
 		}
-		return { run_id: runId, status };
+		// 流结束但没收到任何终态事件 → interrupted：由调用方按 run_id 回放补齐
+		return { run_id: runId, terminal, status, summary };
 	}
 
 	/** 闭环运行历史（含参数快照，可复现） */
@@ -1410,7 +1520,10 @@ class APIService {
 			headers: { Authorization: `Bearer ${localStorage.getItem("token") || ""}` },
 			body: form,
 		});
-		if (!res.ok) throw new Error(await parseErrorResponse(res));
+		if (!res.ok) {
+			const { message, detail, payload } = await readErrorResponse(res);
+			throw new ApiError({ message, status: res.status, detail, payload });
+		}
 		return res.json();
 	}
 
@@ -1660,6 +1773,19 @@ export interface ClosedLoopRunItem {
 export interface ClosedLoopRunDetail extends ClosedLoopRunItem {
 	/** 与实时事件同构的回放序列 */
 	events: ClosedLoopEventData[];
+}
+
+/** 闭环运行终态（B5）：由后端事件归一化得到，调用方按此分支提示，不再自行猜测 */
+export type ClosedLoopRunStatus = "ok" | "partial" | "cancelled" | "error" | "running";
+
+export type StreamClosedLoopTerminal = "run_finished" | "run_error" | "interrupted";
+
+export interface StreamClosedLoopResult {
+	run_id: string;
+	/** run_finished=正常收尾；run_error=后端报运行级错误；interrupted=流中断（调用方应按 run_id 回放补齐） */
+	terminal: StreamClosedLoopTerminal;
+	status: ClosedLoopRunStatus;
+	summary: string | null;
 }
 
 /** 单源采集的扩展参数（时间范围 / 仅新内容 / 条数上限） */

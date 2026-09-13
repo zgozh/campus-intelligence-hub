@@ -36,6 +36,7 @@ import {
   Switch,
   Typography,
 } from "antd";
+import { useMemo } from "react";
 import type { ConfigField, ConfigSchema, ClosedLoopConfig } from "../services/api";
 
 const { Text } = Typography;
@@ -53,6 +54,8 @@ export interface SchemaFormProps {
   columnOptions?: SchemaFormOption[];
   /** multi_select 字段候选项：field.key → options */
   optionsByField?: Record<string, SchemaFormOption[]>;
+  /** 后端 422 字段级校验错误（B1）：key 为字段名，就地标注 validateStatus/help */
+  fieldErrors?: { field: string; message: string }[];
 }
 
 /** 配置值归一化：去掉 undefined（antd 清空控件时产生），统一为 null */
@@ -92,7 +95,16 @@ export default function SchemaForm({
   onChange,
   columnOptions,
   optionsByField,
+  fieldErrors,
 }: SchemaFormProps) {
+  // 字段级错误索引：{字段名: 文案}
+  const errorByField = useMemo(() => {
+    const map: Record<string, string> = {};
+    (fieldErrors ?? []).forEach((item) => {
+      if (item.field) map[item.field] = item.message;
+    });
+    return map;
+  }, [fieldErrors]);
   const [form] = Form.useForm<ClosedLoopConfig>();
   // 监听表单全量值：visible_if 联动与「当前值」判定的唯一来源
   const watched = Form.useWatch([], form) as ClosedLoopConfig | undefined;
@@ -175,6 +187,9 @@ export default function SchemaForm({
           label={field.label}
           valuePropName={field.type === "boolean" ? "checked" : "value"}
           style={{ marginBottom: field.hint ? 4 : 12 }}
+          // B1：后端 422 字段级错误就地标注
+          validateStatus={errorByField[field.key] ? "error" : undefined}
+          help={errorByField[field.key]}
         >
           {renderControl(field)}
         </Form.Item>

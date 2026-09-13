@@ -6,7 +6,6 @@
 import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { MemoryRouter } from "react-router-dom";
 import AdminLayout from "../../src/components/AdminLayout";
 import { BUILD_ID } from "../../src/build-info";
 
@@ -27,6 +26,12 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
+// 项目把 react-router-dom 别名到自研 shim（无 MemoryRouter），测试统一 mock 掉
+vi.mock("react-router-dom", () => ({
+  useNavigate: () => vi.fn(),
+  useLocation: () => ({ pathname: "/overview", search: "" }),
+}));
+
 vi.mock("../../src/services/api", () => ({
   api: {
     getUnreadCount: mocks.getUnreadCount,
@@ -37,11 +42,9 @@ vi.mock("../../src/services/api", () => ({
 
 const renderLayout = () =>
   render(
-    <MemoryRouter>
-      <AdminLayout>
-        <div>Body</div>
-      </AdminLayout>
-    </MemoryRouter>,
+    <AdminLayout>
+      <div>Body</div>
+    </AdminLayout>,
   );
 
 beforeEach(() => {

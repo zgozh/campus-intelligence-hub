@@ -176,7 +176,12 @@ beforeEach(() => {
   mockedApi.listClosedLoopRuns.mockResolvedValue({ runs: [], total: 0 });
   mockedApi.getConfigSchema.mockResolvedValue(SCHEMA);
   mockedApi.listSourceColumns.mockResolvedValue({ source_id: "src_1", columns: [], generated_at: "2026-09-08T00:00:00Z", cached: false });
-  mockedApi.streamClosedLoop.mockResolvedValue({ run_id: LIVE_RUN_ID, status: "ok" });
+  mockedApi.streamClosedLoop.mockResolvedValue({
+    run_id: LIVE_RUN_ID,
+    terminal: "run_finished",
+    status: "ok",
+    summary: "闭环执行完成",
+  });
   mockedApi.getClosedLoopRun.mockResolvedValue(REPLAY_DETAIL);
   mockedApi.cancelClosedLoopRun.mockResolvedValue({ run_id: LIVE_RUN_ID, cancel_requested: true });
   mockedApi.seedDemo.mockResolvedValue({ created: 0, skipped: 0 });
@@ -201,7 +206,12 @@ describe("ClosedLoop 流式运行", () => {
         onEvent("stage_decision", LIVE_EVENTS[3]);
         onEvent("stage_finished", LIVE_EVENTS[4]);
         onEvent("run_finished", LIVE_EVENTS[5]);
-        return { run_id: LIVE_RUN_ID, status: "ok" };
+        return {
+          run_id: LIVE_RUN_ID,
+          terminal: "run_finished" as const,
+          status: "ok" as const,
+          summary: "闭环执行完成",
+        };
       },
     );
 

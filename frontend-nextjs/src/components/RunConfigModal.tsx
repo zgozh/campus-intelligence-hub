@@ -28,6 +28,8 @@ export interface RunConfigModalProps {
   open: boolean;
   onCancel: () => void;
   onConfirm: (config: ClosedLoopConfig) => void;
+  /** 422 字段级校验错误（B1）：由后端 detail[{field,message}] 映射，就地标注到对应字段 */
+  fieldErrors?: { field: string; message: string }[];
 }
 
 /** Schema 默认值 → 初始配置（非法/未知默认值统一为 null） */
@@ -53,7 +55,7 @@ function errorText(error: unknown): string {
   return message ? String(message) : "未知错误";
 }
 
-export default function RunConfigModal({ open, onCancel, onConfirm }: RunConfigModalProps) {
+export default function RunConfigModal({ open, onCancel, onConfirm, fieldErrors }: RunConfigModalProps) {
   const [schema, setSchema] = useState<ConfigSchema | null>(null);
   const [config, setConfig] = useState<ClosedLoopConfig>({});
   const [sources, setSources] = useState<CampusSource[]>([]);
@@ -199,6 +201,7 @@ export default function RunConfigModal({ open, onCancel, onConfirm }: RunConfigM
               onChange={setConfig}
               columnOptions={columnOptions}
               optionsByField={optionsByField}
+              fieldErrors={fieldErrors}
             />
           ) : null}
 

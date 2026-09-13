@@ -111,6 +111,8 @@ export default function ClosedLoop() {
   const [seedLoading, setSeedLoading] = useState(false);
   const [stats, setStats] = useState({ sources: 0, pending: 0, entities: 0, relations: 0, reports: 0, health: 0, objects: 0, kos: 0 });
   const [decisions, setDecisions] = useState<DecisionRun[]>([]);
+  // 422 字段级校验错误（B1）：回填到配置面板，让用户看到具体哪个字段不合法
+  const [fieldErrors, setFieldErrors] = useState<{ field: string; message: string }[]>([]);
 
   const abortRef = useRef<AbortController | null>(null);
   const runIdRef = useRef<string | null>(null);
@@ -190,9 +192,32 @@ export default function ClosedLoop() {
     }
   };
 
-  /** 展示运行失败信息：409 特殊化，422 逐条展示 detail[].message */
+  /** 展示运行失败信息：优先用结构化错误字段（B1），缺失时回退字符串解析 */
   const showRunError = async (error: unknown): Promise<void> => {
     const text = (error as Error)?.message || "未知错误";
+    // 鸭子类型判断而非 instanceof：跨模块边界（含测试 mock）更稳，
+    // 同时兼容后端 ApiError 与任何带 status 字段的错误对象。
+    const structured = (error ?? {}) as {
+      status?: number;
+      runId?: string;
+      fieldErrors?: { field: string; message: string }[];
+    };
+    if (structured.status === 409) {
+      // 优先用响应体里的 run_id；仅在缺失时才回退到运行历史里找
+      const activeId = structured.runId ?? (await findRunningRunId());
+      if (!mountedRef.current) return;
+      setErrorText(`已有进行中的闭环运行${activeId ? `（run_id=${activeId}）` : ""}`);
+      setErrorDetails([]);
+      return;
+    }
+    if (structured.status === 422 && structured.fieldErrors?.length) {
+      if (!mountedRef.current) return;
+      setErrorText("运行参数校验未通过，请修正后重试");
+      setErrorDetails(structured.fieldErrors.map((item) => `${item.field}: ${item.message}`));
+      setFieldErrors(structured.fieldErrors);
+      setConfigOpen(true); // 回到配置面板，字段错误就地标注
+      return;
+    }
     if (text.includes("已有进行中的闭环运行")) {
       const activeId = await findRunningRunId();
       if (!mountedRef.current) return;
@@ -236,6 +261,7 @@ export default function ClosedLoop() {
     setRunSummary(null);
     setErrorText("");
     setErrorDetails([]);
+    setFieldErrors([]);
     setNotice("");
     setReplayRun(null);
     setTabKey("live");
@@ -271,7 +297,19 @@ export default function ClosedLoop() {
         runIdRef.current = result.run_id;
         setRunId(result.run_id);
       }
-      if (mountedRef.current && !sawRunErrorRef.current) message.success("闭环运行完成");
+      // B5：按归一化终态提示，不再"run_error 后仍报完成"
+      if (mountedRef.current) {
+        if (result.terminal === "run_finished") {
+          if (result.status === "ok") message.success("闭环运行完成");
+          else if (result.status === "cancelled") message.warning("闭环运行已取消");
+          else message.warning("闭环运行结束，但存在降级/部分失败阶段");
+        } else if (result.terminal === "run_error") {
+          sawRunErrorRef.current = true; // 事件里已提示，这里只标记终态为失败
+        } else {
+          // interrupted：流中断，按 run_id 回放补齐（不算失败）
+          await recoverFromInterruption(new Error("流连接中断"));
+        }
+      }
     } catch (error: unknown) {
       const aborted = controller.signal.aborted || (error as Error)?.name === "AbortError";
       if (!mountedRef.current) return;
@@ -535,8 +573,15 @@ export default function ClosedLoop() {
 
       <RunConfigModal
         open={configOpen}
-        onCancel={() => setConfigOpen(false)}
-        onConfirm={(config) => void startRun(config)}
+        onCancel={() => {
+          setConfigOpen(false);
+          setFieldErrors([]);
+        }}
+        onConfirm={(config) => {
+          setFieldErrors([]);
+          void startRun(config);
+        }}
+        fieldErrors={fieldErrors}
       />
     </div>
   );
