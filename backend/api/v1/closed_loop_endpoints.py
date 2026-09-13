@@ -73,15 +73,22 @@ async def run_closed_loop_stream(
         客户端断线（依赖提前回收）会让执行中途拿到已关闭的会话而失败，运行记录也会残留
         在 running（需等 30 分钟超时回收）。独立会话让执行与请求生命周期解耦。
         """
-        async with database.AsyncSessionLocal() as exec_db:
-            try:
-                result = await run_closed_loop(exec_db, config=config, on_event=on_event, run_id=run_id)
-                await run_service.finish_run(exec_db, run_id, result.get("status", "ok"), result.get("summary"))
-                return result
-            except Exception as e:  # noqa: BLE001 —— 未预期错误：结算为 error 并向外抛
-                logger.exception("闭环运行异常 %s", run_id)
-                await run_service.finish_run(exec_db, run_id, "error", None, str(e))
-                raise
+        try:
+            async with database.AsyncSessionLocal() as exec_db:
+                try:
+                    result = await run_closed_loop(exec_db, config=config, on_event=on_event, run_id=run_id)
+                    await run_service.finish_run(
+                        exec_db, run_id, result.get("status", "ok"), result.get("summary")
+                    )
+                    return result
+                except Exception as e:  # noqa: BLE001 —— 未预期错误：结算为 error 并向外抛
+                    logger.exception("闭环运行异常 %s", run_id)
+                    await run_service.finish_run(exec_db, run_id, "error", None, str(e))
+                    raise
+        finally:
+            # ★ 唤醒生成器：否则它要等满 HEARTBEAT_SECONDS 才能发现任务已结束
+            #   （实测三阶段合计 6.4s、总耗时 16.6s，差额约 10s 即本次空等）。
+            await queue.put((None, None))
 
     queue: asyncio.Queue = asyncio.Queue()
 
@@ -107,6 +114,9 @@ async def run_closed_loop_stream(
                         "heartbeat", {"ts": datetime.now(timezone.utc).isoformat()}
                     )
                     continue
+                if event is None:
+                    # 执行任务结束的唤醒信号（非业务事件，不向外推送）
+                    break
                 yield sse_frame(event, data)
 
             try:

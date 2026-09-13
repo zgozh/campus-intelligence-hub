@@ -10,12 +10,14 @@ REFACTOR_PLAN_V2 T4 改造要点：
 - **协作式取消**：阶段之间检查 cancel_requested；
 - **单阶段失败降级**：保持既有语义，任一阶段异常不中断整条闭环（且不因 LLM 无 Key 中断）。
 """
+import asyncio
 import logging
 import time
 from datetime import datetime, timezone
 
 from sqlalchemy import select
 
+import database
 from models import CollectionJob, DecisionLog, Source
 from services import run_service
 from services.config_schema_service import validate_config
@@ -261,47 +263,90 @@ async def _stage_knowledge(db, config: dict, sink: EventSink) -> dict:
 
 
 async def _stage_answer(db, config: dict, sink: EventSink) -> dict:
-    """问答/运营层：日报 + AI 洞察 + 健康度（按配置开关，跳过也留决策）。"""
+    """问答/运营层：日报 + AI 洞察 + 健康度（按配置开关，跳过也留决策）。
+
+    REFACTOR_PLAN_V2_2 B3：日报与洞察**并行**执行（两者无数据依赖，各自写自己的表），
+    总耗时由"两次 LLM 相加"降为"取较大者"（真机实测 16.9–18.6s → 目标 ≤15s）。
+    并发写库不能共用同一个 AsyncSession，故各自使用独立会话。
+    """
     started = time.perf_counter()
     should_push = bool(config.get("push_notifications", True))
 
-    digest_title = ""
-    if config.get("gen_digest", True):
+    want_digest = bool(config.get("gen_digest", True))
+    want_insight = bool(config.get("gen_insight", True))
+
+    async def _digest_job() -> tuple[dict, int]:
         from services.digest_service import generate_digest
 
         t = time.perf_counter()
-        digest = await generate_digest(db, "daily")
-        digest_title = digest.get("title", "")
-        await sink.decision("问答/运营 Agent", "生成日报", digest_title, "ok", _ms(t))
-    else:
-        await sink.decision("问答/运营 Agent", "生成日报", "配置已关闭", "skip", 0)
+        async with database.AsyncSessionLocal() as session:
+            result = await generate_digest(session, "daily")
+        return result, _ms(t)
 
-    if config.get("gen_insight", True):
+    async def _insight_job() -> tuple[dict, int]:
         from agents.insight_generator import generate_insight
-        from services.notify_service import push_notification
 
         t = time.perf_counter()
-        insight = await generate_insight(db, persist=True)
-        await sink.decision(
-            "问答/运营 Agent",
-            "生成洞察",
-            insight.get("title") or f"insight {insight.get('id', '')}",
-            "ok",
-            _ms(t),
-        )
-        if should_push:
-            try:
-                await push_notification(
-                    db,
-                    "insight",
-                    insight.get("title") or "AI 校务洞察",
-                    insight.get("content"),
-                    link="/insights",
-                )
-            except Exception as e:  # noqa: BLE001 —— 推送失败不影响闭环
-                logger.warning("闭环洞察推送失败（降级）: %s", e)
+        async with database.AsyncSessionLocal() as session:
+            result = await generate_insight(session, persist=True)
+        return result, _ms(t)
+
+    jobs: dict[str, "asyncio.Task"] = {}
+    if want_digest:
+        jobs["digest"] = asyncio.create_task(_digest_job())
+    if want_insight:
+        jobs["insight"] = asyncio.create_task(_insight_job())
+
+    outcomes: dict[str, object] = {}
+    if jobs:
+        results = await asyncio.gather(*jobs.values(), return_exceptions=True)
+        for name, outcome in zip(jobs.keys(), results):
+            outcomes[name] = outcome
+
+    # ---- 日报 ----
+    digest_title = ""
+    if not want_digest:
+        await sink.decision("问答/运营 Agent", "生成日报", "配置已关闭", "skip", 0)
     else:
+        outcome = outcomes.get("digest")
+        if isinstance(outcome, BaseException):
+            logger.warning("闭环日报生成失败（降级）: %s", outcome)
+            await sink.decision("问答/运营 Agent", "生成日报", str(outcome), "partial", 0)
+        else:
+            digest, duration = outcome  # type: ignore[misc]
+            digest_title = digest.get("title", "")
+            await sink.decision("问答/运营 Agent", "生成日报", digest_title, "ok", duration)
+
+    # ---- 洞察 ----
+    if not want_insight:
         await sink.decision("问答/运营 Agent", "生成洞察", "配置已关闭", "skip", 0)
+    else:
+        outcome = outcomes.get("insight")
+        if isinstance(outcome, BaseException):
+            logger.warning("闭环洞察生成失败（降级）: %s", outcome)
+            await sink.decision("问答/运营 Agent", "生成洞察", str(outcome), "partial", 0)
+        else:
+            insight, duration = outcome  # type: ignore[misc]
+            await sink.decision(
+                "问答/运营 Agent",
+                "生成洞察",
+                insight.get("title") or f"insight {insight.get('id', '')}",
+                "ok",
+                duration,
+            )
+            if should_push:
+                try:
+                    from services.notify_service import push_notification
+
+                    await push_notification(
+                        db,
+                        "insight",
+                        insight.get("title") or "AI 校务洞察",
+                        insight.get("content"),
+                        link="/insights",
+                    )
+                except Exception as e:  # noqa: BLE001 —— 推送失败不影响闭环
+                    logger.warning("闭环洞察推送失败（降级）: %s", e)
 
     from services.radar_service import knowledge_health
 
