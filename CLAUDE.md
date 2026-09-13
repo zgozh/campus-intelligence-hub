@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repo layout
 
-- `frontend-nextjs/` is the active admin/dashboard frontend. Treat the older `frontend/` directory as legacy/reference only.
-- `backend/` is a FastAPI app with SQLite persistence, Redis-backed rate limiting/cache fallbacks, and self-KB retrieval/indexing (Qdrant).
-- `widget/` builds the embeddable chat widget SDK that talks to the backend streaming chat endpoints.
+- `frontend-nextjs/` is the only frontend (Next.js 14 App Router) — the legacy `frontend/` directory does not exist in this repo.
+- 校务中台后端：FastAPI + async SQLAlchemy（PostgreSQL 生产 / SQLite 测试），Redis 限流与缓存兜底，self-KB 检索（Qdrant）；启动时执行迁移执行器（`services/migration_runner.py`）与闭环崩溃恢复（`services/run_service.reap_orphaned_runs`）。
+- 本仓库**不含** Basjoo 时期的嵌入式 widget SDK（`widget/` 目录与本仓库无关），公开问答能力以 REST/MCP 形式对外。
 - `nginx/` contains the reverse-proxy config used in Docker deployments.
 - `scrapling-service/` is a standalone FastAPI microservice that performs HTTP fetching with `curl_cffi` (TLS-impersonated Chrome 120) and `readability-lxml` content extraction, with `httpx` fallback when `curl_cffi` fails. The backend talks to it via HTTP on port 8001 (internal Docker network).
 - `docker-compose.yml` is the primary local/dev/prod orchestration entrypoint.
@@ -15,19 +15,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Docker compose
 
-- Start development stack: `docker compose --profile dev up -d`
-- Start production-style stack: `docker compose --profile prod up -d`
-- Rebuild a service: `docker compose --profile dev up -d --build backend-dev frontend-dev`
-- Rebuild scrapling service: `docker compose --profile dev up -d --build scrapling-service`
-- Follow logs: `docker compose logs -f backend-dev frontend-dev nginx`
-- Watch mode (auto-rebuild on file changes): `docker compose --profile dev up --watch`
+- 起栈：`docker compose up -d`（**没有 profiles**）
+- 重建：`docker compose up -d --build backend frontend`（只重建 backend 会摘掉 frontend 容器，需 `docker compose up -d frontend` 补回）
+- 日志：`docker compose logs -f backend frontend`
+- 容器内跑后端测试：`docker compose exec -T backend python -m pytest --ignore=tests/integration -q`
+- 真机验收：`powershell -File scripts/verify_all.ps1`（含接口冒烟 + 真实浏览器场景冒烟）
 
-### One-command production install (Ubuntu/Debian)
+### One-command production install
 
-- Blank server deploy: `curl -fsSL https://raw.githubusercontent.com/haoyiyin/basjoo/main/install-deploy.sh | sudo sh`
-- Local repo deploy: `sudo sh install-deploy.sh`
-- Supported systems: Ubuntu and Debian. The script auto-installs Docker/Compose, clones/syncs the repo, and deploys the production profile.
-- Persistent volumes are preserved; `install-deploy.sh` does not remove `backend-data`, `redis-data`, or `postgres-data`.
+**本仓库没有一键安装脚本**（历史上的 `install-deploy.sh` 已不存在，勿再引用）。部署方式：
+```bash
+cp .env.example .env          # 填 DASHSCOPE_API_KEY；生产设 DEMO_RELAX_AUTH=false
+docker compose up -d --build  # 单机一键起（无 profiles）
+```
+持久卷 `backend-data` / `redis-data` / `postgres-data` 不会被 `up --build` 删除；发布前检查清单见 `DEPLOY-GUIDE.md`。
 
 ### Frontend (`frontend-nextjs/`)
 
@@ -39,22 +40,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Type-check: `npm run typecheck`
 - Run tests: `npm run test`
 
-### Widget (`widget/`)
+### 校务项目自有脚本（根目录 `scripts/`）
 
-- Install deps: `npm install`
-- Dev bundle/example server: `npm run dev`
-- Build distributables: `npm run build` (typecheck + dev + prod bundles)
-- Dev-only build: `npm run build:dev` (unminified ESM, `dist/basjoo-widget.js`)
-- Prod-only build: `npm run build:prod` (minified IIFE, `dist/basjoo-widget.min.js`)
-- Type-check: `npm run typecheck`
-- Run tests: `npm run test`
+- 接口真机冒烟：`powershell -File scripts/smoke_refactor.ps1`
+- 真实浏览器场景冒烟：`node scripts/browser_smoke.mjs --window 1366x768`（单元素探针：`node scripts/browser_probe.mjs --url <url> --window 1366x768 --expect "<sel>"`）
+- 一键总验收：`powershell -File scripts/verify_all.ps1`
+- 文档一致性校验：`powershell -File scripts/docs_check.ps1`
+- 注入构建标识并重建：`powershell -File scripts/build_all.ps1`
+- 评测复跑：`python scripts/eval_grounding.py`
 
-### Root-level E2E tests (Playwright)
-
-- Smoke tests (dev): `npm run test:e2e` -- auto-starts docker compose --profile dev
-- Prod-like E2E: `npm run test:e2e:prod` -- requires docker compose --profile prod up -d first
-- All projects: `npm run test:e2e:all`
-- Widget cross-origin: `npm run test:e2e:widget`
+### 已移除（勿再引用）
+Basjoo 时期的 `widget/`、根目录 `package.json`、`npm run test:e2e*`、`install-deploy.sh` 在本仓库均**不存在**。
 
 ### Backend (`backend/`)
 
@@ -103,16 +99,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `frontend-nextjs/src/context/AuthContext.tsx` stores admin auth state in `localStorage` and powers `RequireAuth`-guarded dashboard routes.
 - `frontend-nextjs/src/services/api.ts` is the main frontend API client. It handles bearer auth, locale propagation, and SSE parsing for `/api/v1/chat/stream`.
 
-### Widget structure
+### 展示层约定（校务项目）
 
-- `widget/src/BasjooWidget.tsx` is a self-contained embeddable widget implementation bundled with esbuild.
-- The widget auto-detects `apiBase`, streams chat via SSE, persists visitor/session IDs in `localStorage`, and polls for human-takeover replies.
-- Backend `/sdk.js`, `/basjoo-logo.png`, and widget demo routes are served directly from `backend/main.py`.
+- 时间与 Markdown 统一走 `frontend-nextjs/src/utils/format.ts`（`formatDateTime` / `formatTime` / `displayTitle` / `stripInlineMd`）；**禁止**组件内自写 `toLocaleString` 或本地 `fmtTime`。
+- 正文类内容用 `src/components/DashboardMarkdown.tsx` 渲染（禁用 raw HTML，不得引入 `rehype-raw`）；标题类内容清洗为纯文本。
+- 规则全文见 `src/utils/format.ts` 文件头注释与 `frontend-nextjs/tests/unit/README.md`。
 
 ### Deployment notes
 
-- `docker-compose.yml` defines shared Redis/Qdrant/PostgreSQL plus separate dev/prod backend/frontend services.
-- `install-deploy.sh` is the one-command production installer for Ubuntu/Debian. It wraps `deploy.sh` and handles Docker/Compose installation, repo clone/sync, and post-deploy health checks.
+- `docker-compose.yml` 定义 Redis/Qdrant/PostgreSQL + backend + frontend + scrapling 六个服务（**无 profiles**，容器名 `campus-*`）。
 - The active frontend container is `frontend-nextjs`; compose and nginx configs route traffic to that app, not the legacy frontend.
 - Nginx should allow bodies larger than the backend guard: `nginx/conf.d/default.conf` sets `client_max_body_size 12m` so oversized requests reach FastAPI and return JSON 413 responses.
 - Optional HTTPS is enabled by `nginx/docker-entrypoint.sh` only when readable cert/key files exist in `./ssl`; otherwise the stack stays in HTTP-only mode.

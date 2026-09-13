@@ -121,6 +121,24 @@ describe("AdminLayout 通知中心（T11）", () => {
     });
   });
 
+  it("B8：点击已读通知不再发标记请求（省一次无效往返）", async () => {
+    // 造一条已读通知
+    mocks.listNotifications.mockResolvedValue({
+      notifications: [{ ...NOTIFICATION, read: true }],
+      total: 1,
+    });
+    renderLayout();
+
+    fireEvent.click(screen.getByLabelText("通知中心"));
+    fireEvent.click(await screen.findByText("校务快讯（近 7 天）"));
+
+    // 已读 → 不应调用 markNotificationRead；但带 link 仍要跳转
+    await waitFor(() => {
+      expect(mocks.navigate).toHaveBeenCalledWith("/sources");
+    });
+    expect(mocks.markNotificationRead).not.toHaveBeenCalled();
+  });
+
   it("点击「全部已读」调用 readAllNotifications 并刷新未读数", async () => {
     renderLayout();
 

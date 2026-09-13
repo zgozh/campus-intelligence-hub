@@ -18,6 +18,7 @@ const KIND_TABS: { key: string; label: string }[] = [
   { key: "brief", label: "快讯" },
   { key: "insight", label: "洞察" },
   { key: "alert", label: "告警" },
+  { key: "expiring", label: "临期" },
   { key: "system", label: "系统" },
 ];
 

@@ -37,6 +37,7 @@ import {
   Typography,
 } from "antd";
 import { useMemo } from "react";
+import dayjs, { type Dayjs } from "dayjs";
 import type { ConfigField, ConfigSchema, ClosedLoopConfig } from "../services/api";
 
 const { Text } = Typography;
@@ -66,6 +67,16 @@ export function normalizeConfig(next: ClosedLoopConfig): ClosedLoopConfig {
     out[key] = raw === undefined ? null : (raw as ClosedLoopConfig[string]);
   });
   return out;
+}
+
+/**
+ * `YYYY-MM-DD` 字符串 → dayjs（受控 DatePicker 的回显来源）。
+ * 非法/空值返回 null，避免 antd 因 Invalid Date 报警或渲染异常。
+ */
+export function toDayjs(value: ClosedLoopConfig[string] | undefined): Dayjs | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const parsed = dayjs(value, "YYYY-MM-DD", true);
+  return parsed.isValid() ? parsed : null;
 }
 
 /** visible_if 判定：所有声明键都严格等于当前值时才显示（无 visible_if = 始终显示） */
@@ -138,11 +149,15 @@ export default function SchemaForm({
           />
         );
       case "date":
+        // B4：受控实现——回显来自配置快照（`YYYY-MM-DD` 字符串 → dayjs），
+        // 保证"程序化写入的日期"也能正确回显（此前非受控会静默不回填）。
+        // dayjs 是 antd 的既有直接依赖，这里在 package.json 显式声明以消除幽灵依赖。
         return (
           <DatePicker
             aria-label={field.label}
             style={{ width: "100%" }}
             placeholder="请选择日期"
+            value={toDayjs(current[field.key])}
             onChange={(_date, dateString) => {
               const picked = Array.isArray(dateString) ? dateString[0] : dateString;
               patchField(field.key, picked ? picked : null);

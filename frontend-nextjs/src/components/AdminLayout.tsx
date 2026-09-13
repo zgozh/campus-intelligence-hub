@@ -123,13 +123,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   /** 点击通知：先标记已读（本地即时生效 + 刷新未读数），有 link 再跳转 */
   const handleNotificationClick = async (n: NotificationItem) => {
-    try {
-      await api.markNotificationRead(n.id);
-    } catch {
-      /* 标记失败不阻断跳转 */
+    // B8：已读的跳过请求（后端 /read 本就幂等，这里省一次无意义往返）
+    if (!n.read) {
+      try {
+        await api.markNotificationRead(n.id);
+      } catch {
+        /* 标记失败不阻断跳转 */
+      }
+      setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
+      void refreshUnread();
     }
-    setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
-    void refreshUnread();
     if (n.link) {
       setNotifOpen(false);
       navigate(n.link);

@@ -1,9 +1,21 @@
-import type { CSSProperties } from 'react';
-import ReactMarkdown from 'react-markdown';
+import type { ComponentProps, CSSProperties } from 'react';
+import ReactMarkdown, { type ExtraProps } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 interface MarkdownRendererProps {
   content: string;
+}
+
+/** react-markdown `code` 组件的显式 props 类型（与 DashboardMarkdown 同型，避免禁用的 any） */
+type CodeProps = ComponentProps<'code'> & ExtraProps & { inline?: boolean };
+
+/**
+ * 块级代码判定：react-markdown v9 起不再传 `inline`（v10 已移除），只能靠 `language-*` class 区分。
+ * 与 `DashboardMarkdown.isBlockCode` 保持同一口径，避免两处渲染器行为漂移。
+ */
+function isBlockCode(inline: boolean | undefined, className: unknown): boolean {
+  if (typeof inline === 'boolean') return !inline;
+  return typeof className === 'string' && /(^|\s)language-/.test(className);
 }
 
 const inlineCodeStyle: CSSProperties = {
@@ -59,13 +71,15 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
           </a>
         ),
         pre: ({ children }) => <pre style={{ margin: '0 0 0.75rem 0' }}>{children}</pre>,
-        code: ({ inline, children, ...props }: any) =>
-          inline ? (
-            <code style={inlineCodeStyle} {...props}>
+        // react-markdown v10 起不再传 `inline`（与 DashboardMarkdown 同型问题），
+        // 只能靠 `language-*` class 区分行内/块级代码；`inline` 若未来恢复则优先采用。
+        code: ({ inline, className, children, ...props }: CodeProps) =>
+          isBlockCode(inline, className) ? (
+            <code style={blockCodeStyle} className={className} {...props}>
               {children}
             </code>
           ) : (
-            <code style={blockCodeStyle} {...props}>
+            <code style={inlineCodeStyle} {...props}>
               {children}
             </code>
           ),
