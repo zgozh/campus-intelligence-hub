@@ -158,8 +158,13 @@ export default function RunConfigModal({ open, onCancel, onConfirm, fieldErrors 
       open={open}
       title="闭环运行配置"
       width={680}
+      centered
       onCancel={onCancel}
       maskClosable={false}
+      // 面板可高达 ~1099px（Schema 字段多），若不限制高度会让底部「确定并开始」落在视口外：
+      // 真机实测 1366×768 可见比例仅 0.524、1280×720 降到 0.48（必须滚动才点得到）。
+      // 这里限制 body 高度并内部滚动，保证按钮始终可见可点。
+      styles={{ body: { maxHeight: "calc(100vh - 240px)", overflowY: "auto" } }}
       footer={[
         <Button key="cancel" onClick={onCancel}>
           取消

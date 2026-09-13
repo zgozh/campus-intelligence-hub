@@ -46,6 +46,22 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("数据库初始化完成")
 
+    # 崩溃恢复：上一次进程若在闭环运行中被重启，run_records 会残留 status=running，
+    # 而互斥检查会因此拒绝后续所有闭环运行（409）直到 30 分钟超时。
+    # 启动瞬间不可能有本实例正在跑的运行，故统一结算为 error（单实例部署前提）。
+    try:
+        from database import AsyncSessionLocal
+        from services.run_service import reap_orphaned_runs
+
+        async with AsyncSessionLocal() as session:
+            reaped = await reap_orphaned_runs(session)
+        if reaped:
+            logger.warning("崩溃恢复：已把 %d 条僵尸运行标记为 error", reaped)
+        else:
+            logger.info("崩溃恢复检查完成：无僵尸运行")
+    except Exception as e:  # noqa: BLE001 —— 恢复失败不应阻断启动
+        logger.warning("崩溃恢复检查失败（忽略）: %s", e)
+
     if not test_mode:
         # 初始化 Redis 连接
         logger.info("初始化 Redis 连接...")

@@ -146,6 +146,50 @@ class TestRunLifecycle:
             assert running is not None and running.run_id == "run_fresh_null_start"
 
 
+class TestReapOrphanedRuns:
+    """崩溃恢复：后端重启（部署/rebuild）后残留的 running 运行必须被结算。
+
+    否则互斥检查会拒绝后续所有闭环运行（409）直到 30 分钟超时——真机已复现：
+    run 6984341a3b6f 因 rebuild 打断执行而残留 running，闭环瘫痪。
+    """
+
+    async def test_reaps_all_running_runs_regardless_of_age(self, setup_test_db):
+        async with database.AsyncSessionLocal() as db:
+            fresh = await run_service.create_run(db, run_service.TYPE_CLOSED_LOOP, {})
+            second = await run_service.create_run(db, run_service.TYPE_CLOSED_LOOP, {})
+
+            # 很"新"的运行也应收割：进程重启后它不可能还在跑
+            assert fresh.started_at is not None
+            reaped = await run_service.reap_orphaned_runs(db)
+            assert reaped == 2
+
+            for run_id in (fresh.run_id, second.run_id):
+                row = await db.get(RunRecord, run_id)
+                assert row.status == "error"
+                assert "进程重启" in (row.error or "")
+                assert row.finished_at is not None
+
+            # 收割后互斥检查必须放行下一次运行
+            assert await run_service.get_running_run(db, run_service.TYPE_CLOSED_LOOP) is None
+
+    async def test_does_not_touch_finished_runs(self, setup_test_db):
+        async with database.AsyncSessionLocal() as db:
+            run = await run_service.create_run(db, run_service.TYPE_CLOSED_LOOP, {})
+            await run_service.finish_run(db, run.run_id, "ok", "正常完成")
+            assert await run_service.reap_orphaned_runs(db) == 0
+            row = await db.get(RunRecord, run.run_id)
+            assert row.status == "ok"
+            assert row.summary == "正常完成"
+
+    async def test_can_filter_by_type(self, setup_test_db):
+        async with database.AsyncSessionLocal() as db:
+            await run_service.create_run(db, run_service.TYPE_CLOSED_LOOP, {})
+            await run_service.create_run(db, "collection", {})
+            assert await run_service.reap_orphaned_runs(db, run_type="collection") == 1
+            remaining = await run_service.get_running_run(db, run_service.TYPE_CLOSED_LOOP)
+            assert remaining is not None
+
+
 class TestListRuns:
     async def test_list_runs_returns_history(self, setup_test_db):
         async with database.AsyncSessionLocal() as db:

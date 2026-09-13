@@ -80,6 +80,36 @@ def _aware(value: datetime | None) -> datetime | None:
     return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
 
 
+async def reap_orphaned_runs(db, run_type: str | None = None) -> int:
+    """崩溃恢复：把**所有**仍为 running 的运行结算为 error（进程重启后它们不可能还活着）。
+
+    为什么必需：运行状态由进程内的 asyncio 任务驱动。后端重启（部署/崩溃/rebuild）会让
+    任务消失，而 run_records 里仍留着 status=running —— 由于 `/closed-loop/stream` 用
+    `get_running_run()` 做互斥，这条"僵尸运行"会**拒绝后续所有闭环运行（409）**，
+    直到 30 分钟超时回收为止（真机已复现：重建镜像时打断了进行中的运行）。
+
+    调用时机：应用启动（lifespan）时调用一次。前提是单实例部署（docker compose 默认），
+    此时启动瞬间不可能存在其它实例正在跑的运行；若将来多副本，应改为按实例标识/心跳判定。
+    """
+    query = select(RunRecord).where(RunRecord.status == "running")
+    if run_type:
+        query = query.where(RunRecord.type == run_type)
+    rows = (await db.execute(query)).scalars().all()
+
+    now = _now()
+    for run in rows:
+        run.status = "error"
+        run.error = "后端进程重启导致运行中断（启动时崩溃恢复）"
+        run.finished_at = now
+        started = _aware(run.started_at)
+        if started:
+            run.duration_ms = max(0, int((now - started).total_seconds() * 1000))
+        logger.warning("启动恢复：把僵尸运行 %s 标记为 error", run.run_id)
+    if rows:
+        await db.commit()
+    return len(rows)
+
+
 async def _close_stale_runs(db, run_type: str) -> int:
     """把超时未收尾的 running 运行标记为 error，防止互斥锁永久阻塞。
 
