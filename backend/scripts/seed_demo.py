@@ -11,16 +11,61 @@ from agents.extractor import infer_expiry
 from collectors.dedup import content_hash
 from database import AsyncSessionLocal
 from models import (
+    BriefReport,
+    ChangeEvent,
     CollectionJob,
     Conflict,
+    DecisionLog,
     Digest,
+    InsightReport,
+    KGEntity,
+    KGRelation,
     KnowledgeObject,
+    Notification,
     RawDocument,
     ReviewTask,
+    RunRecord,
     Source,
     normalize_url,
 )
 from scripts.demo_templates import DEMO_ARTICLES
+
+# 清库删除顺序 = 外键依赖由深到浅。
+#
+# 为什么必须是这个顺序：库里所有外键都是 NO ACTION（没有 DB 级级联），顺序错了会被挡住。
+# 历史 bug：本清单漏了 ChangeEvent，于是 PostgreSQL 上执行到最后一步 `delete from sources`
+# 直接报 `violates foreign key constraint "change_events_source_id_fkey"` ——
+# 也就是"从头演示"用的一键清库脚本本身是坏的（数据源删除端点当年同样被这个外键挡住）。
+# 同理 kg_relations.head_id/tail_id 指向 kg_entities，必须先删关系。
+_RESET_ORDER = (
+    ReviewTask,  # → knowledge_objects
+    Conflict,  # 字符串引用 KO（无外键，但不清就是悬空冲突）
+    KGRelation,  # → kg_entities（head_id / tail_id）
+    KGEntity,
+    KnowledgeObject,  # → raw_documents
+    RawDocument,  # → sources
+    ChangeEvent,  # → sources  ← 曾经漏掉这一项
+    CollectionJob,  # → sources
+    Source,
+    DecisionLog,  # 闭环决策日志（run_id 与 RunRecord 同名，仅字符串关联）
+    RunRecord,
+    Digest,
+    InsightReport,
+    BriefReport,
+    Notification,
+)
+
+
+async def reset_demo() -> None:
+    """清空所有**内容**数据（RESET_DEMO）：采集/知识/图谱/自动化产物 + 数据源。
+
+    保留工作空间/Agent/管理员/租户/知识库(KB)/会话等**配置与账号**数据——
+    它们不是演示内容，清掉会导致登录不了、还得重新配置环境。
+    """
+    async with AsyncSessionLocal() as db:
+        for model in _RESET_ORDER:
+            await db.execute(delete(model))
+        await db.commit()
 
 _TYPE_MAP = {
     "通知公告": "Announcement",
@@ -28,14 +73,6 @@ _TYPE_MAP = {
     "规章制度": "Regulation",
     "新闻动态": "Event",
 }
-
-
-async def reset_demo() -> None:
-    """清空所有数据（RESET_DEMO）。"""
-    async with AsyncSessionLocal() as db:
-        for model in (ReviewTask, Conflict, Digest, KnowledgeObject, RawDocument, CollectionJob, Source):
-            await db.execute(delete(model))
-        await db.commit()
 
 
 async def seed_all() -> int:
