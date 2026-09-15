@@ -12,6 +12,9 @@
 #   powershell -File scripts/release_gitee.ps1                 # 干跑：导出到临时目录 + 自检，不推送
 #   powershell -File scripts/release_gitee.ps1 -Push           # 导出后强推（--force）到 Gitee master
 #   powershell -File scripts/release_gitee.ps1 -Push -Cleanup  # 推送成功后删除临时目录
+#   powershell -File scripts/release_gitee.ps1 -Push -KeepRemoteDocs
+#       文档（README / ARCHITECTURE / DEPLOY-GUIDE）**保持展示仓现有版本不动**，
+#       只把代码更新成开发仓当前状态（适用于"展示仓文档已人工精简、不想被覆盖"）。
 #
 # 为什么用「导出 + 全新 git init + 单 commit + force push」而不是 .gitignore：
 #   .gitignore 只对「未跟踪文件」生效，对已跟踪的开发文档无效；且同一份 .gitignore
@@ -21,7 +24,9 @@
 param(
   [switch]$Push,
   [string]$Remote = "origin",
-  [switch]$Cleanup
+  [switch]$Cleanup,
+  # 文档以展示仓现有版本为准（只更新代码）；不传则文档从开发仓导出并做死链改写
+  [switch]$KeepRemoteDocs
 )
 
 $ErrorActionPreference = "Stop"
@@ -121,6 +126,21 @@ try {
   }
   Write-Host ("  [OK] 导出源：HEAD = " + $head + "（工作区已跟踪文件干净）") -ForegroundColor Green
 
+  # 文档以展示仓为准时，先解析远端 tip（后面对这 3 个文档做逐字节校验）
+  $remoteTip = ""
+  if ($KeepRemoteDocs) {
+    Invoke-Git @("fetch", $Remote, "master") | Out-Null
+    $remoteTip = (Invoke-Git @("rev-parse", ($Remote + "/master")) | Select-Object -First 1)
+    $remoteDocs = Invoke-Git @("ls-tree", "--name-only", $remoteTip) |
+      Where-Object { $keepRootDocs -contains $_ }
+    foreach ($doc in $keepRootDocs) {
+      if ($remoteDocs -notcontains $doc) {
+        throw ("-KeepRemoteDocs 要求展示仓已存在该文档，但 " + $Remote + "/master(" + $remoteTip + ") 里没有 " + $doc)
+      }
+    }
+    Write-Host ("  [OK] 文档来源：展示仓 " + $Remote + "/master = " + $remoteTip + "（README / ARCHITECTURE / DEPLOY-GUIDE 保持不动）") -ForegroundColor Yellow
+  }
+
   Write-Host "`n=== 2) 导出可运行内容到临时目录 ===" -ForegroundColor Cyan
   $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
   $out = Join-Path $env:TEMP ("campus-gitee-" + $stamp)
@@ -144,9 +164,26 @@ try {
   Write-Host "  —— 剔除清单 ——" -ForegroundColor DarkGray
   foreach ($e in $excluded) { Write-Host ("     - " + $e) -ForegroundColor DarkGray }
 
-  Write-Host "`n=== 3) 改写展示版文档（去掉指向被剔除文档的死链） ===" -ForegroundColor Cyan
+  Write-Host "`n=== 3) 展示版文档处理 ===" -ForegroundColor Cyan
   $excludedDocNames = @()
   foreach ($e in $excluded) { if ($e -notmatch "/") { $excludedDocNames += $e } }
+
+  if ($KeepRemoteDocs) {
+    # 文档保持展示仓现有版本：只做逐字节复制 + 校验，不做任何改写
+    foreach ($doc in $keepRootDocs) {
+      $dest = Join-Path $out $doc
+      $cmdLine = 'git show ' + $remoteTip + ':' + $doc + ' > "' + $dest + '"'
+      cmd /c $cmdLine | Out-Null
+      if (-not (Test-Path $dest)) { throw ("从展示仓取文档失败：" + $doc) }
+      $expectHash = (Invoke-Git @("rev-parse", ($remoteTip + ":" + $doc)) | Select-Object -First 1)
+      $gotHash = (Invoke-Git @("hash-object", "--path", $doc, $dest) | Select-Object -First 1)
+      if ($expectHash -ne $gotHash) {
+        throw ("文档与展示仓版本不一致（未做到保持不动）：" + $doc + " 期望 " + $expectHash + " 实际 " + $gotHash)
+      }
+      Write-Host ("  [OK] 保持展示仓版本：" + $doc + "（blob " + $gotHash.Substring(0, 8) + "）") -ForegroundColor Green
+    }
+    Write-Host "  [OK] 未对文档做任何改写（KeepRemoteDocs）" -ForegroundColor Green
+  } else {
   $rows = Remove-DocTableRows (Join-Path $out "README.md") $excludedDocNames
   Write-Host ("  [OK] README.md 删除导航表行 " + $rows + " 行") -ForegroundColor Green
 
@@ -166,6 +203,7 @@ try {
     '- [ ] **11. 人工演示动线**：按 `DEMO_SCRIPT.md` 走一遍（配置面板 → 实时时间线 → 通知中心），确认浏览器**硬刷新**后版本号正确' `
     '- [ ] **11. 人工演示动线**：走一遍（配置面板 → 实时时间线 → 通知中心），确认浏览器**硬刷新**后版本号正确'
   Write-Host "  [OK] README.md / ARCHITECTURE.md / DEPLOY-GUIDE.md 内文引用已同步" -ForegroundColor Green
+  }
 
   $leftover = @()
   foreach ($d in $excludedDocNames) { if (Test-Path (Join-Path $out $d)) { $leftover += $d } }
