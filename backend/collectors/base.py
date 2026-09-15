@@ -1,7 +1,7 @@
 """站点适配器基类与文章数据模型（迁移自 school-knowledge-hub）。"""
 import re
 from dataclasses import dataclass
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 from selectolax.parser import HTMLParser
 
@@ -97,9 +97,22 @@ class SiteAdapter:
         return seen
 
     def _abs_url(self, base_url: str, href: str) -> str:
+        """相对 href → 绝对 URL（按标准相对路径规则解析，必须保留 scheme + host）。
+
+        历史实现是 `base_url.rsplit("/", 1)[0] + "/" + href`，两种 base_url 都会出错：
+        - 裸域名（https://news.gzhu.edu.cn）→ 产出 https://info/... （host 丢失，
+          随后被 SSRF 校验拦下，表现为"该数据源一条都抓不到"）；
+        - 目录型列表页（.../z__l/tzgg.htm）→ 多拼一层目录。
+        站点若把文章统一挂在域名根（gzhu 系 /info/ 即如此），由子类重写本方法。
+        """
         if href.startswith("http"):
             return href
-        return base_url.rsplit("/", 1)[0] + "/" + href.lstrip("./")
+        joined = urljoin(base_url, href)
+        if not urlparse(joined).hostname:
+            # 兜底：任何情况下都不允许产出没有 host 的 URL
+            parsed = urlparse(base_url)
+            joined = f"{parsed.scheme}://{parsed.netloc}/" + href.lstrip("./")
+        return joined
 
     def _text(self, node, default: str = "") -> str:
         return node.text(strip=True) if node is not None else default

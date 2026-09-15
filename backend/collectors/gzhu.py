@@ -15,13 +15,6 @@ class GUZhuAdapter(GUZhuCMSAdapter):
     }
     default_column = "通知公告"
 
-    def _abs_url(self, base_url: str, href: str) -> str:
-        """gzhu 列表页位于 /z__l/ 等目录，但文章 href 以站点根 /info/ 起步，必须拼到域名根。"""
-        if href.startswith("http"):
-            return href
-        root = re.match(r"(https?://[^/]+)", base_url).group(1)
-        return root + "/" + href.lstrip("./")
-
     def parse_list(self, html: str, base_url: str) -> list[ArticleRef]:
         tree = HTMLParser(html)
         column = self.column_for_list_page(html, base_url)

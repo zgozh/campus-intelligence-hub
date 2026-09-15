@@ -1586,8 +1586,23 @@ export interface CollectionJob {
 	id: string;
 	source_id: string;
 	status: string;
-	stage_trace?: Record<string, string> | null;
-	result?: { fetched?: number; indexed?: number; errors?: string[] } | null;
+	stage_trace?: Record<string, string | number | boolean> | null;
+	result?: {
+		fetched?: number;
+		indexed?: number;
+		updated?: number;
+		skipped?: number;
+		filtered_in?: number;
+		filtered_out?: number;
+		truncated?: boolean;
+		errors?: string[];
+		/** 本次请求的列表页数上限（0 档位在后端展开为 50） */
+		pages_requested?: number;
+		/** 实际抓到的列表页数；小于 pages_requested 说明翻页没生效 */
+		pages_fetched?: number;
+		/** true = 还有剩余页数但页面没有「下一页」入口（典型：base_url 填的是站点首页） */
+		pagination_unavailable?: boolean;
+	} | null;
 	error_message?: string | null;
 	created_at: string;
 	started_at?: string | null;

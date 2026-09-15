@@ -14,11 +14,13 @@ const statusZh: Record<string, string> = { PENDING: '等待中', RUNNING: '采�
 const STAGES = ['Fetch', 'Parse', 'Clean', 'Classify', 'Dedup', 'Index'];
 const STAGE_ZH: Record<string, string> = { Fetch: '抓取', Parse: '解析', Clean: '清洗', Classify: '分类', Dedup: '去重', Index: '入库' };
 
-function st(trace: Record<string, string> | null | undefined, stage: string): string {
-  return (trace || {})[stage] || 'pending';
+type StageTrace = Record<string, string | number | boolean>;
+
+function st(trace: StageTrace | null | undefined, stage: string): string {
+  return String((trace || {})[stage] ?? 'pending');
 }
 
-function act(trace?: Record<string, string> | null): number {
+function act(trace?: StageTrace | null): number {
   // 当前进行到哪一步
   for (let i = 0; i < STAGES.length; i++) {
     const s = st(trace, STAGES[i]);
@@ -28,8 +30,7 @@ function act(trace?: Record<string, string> | null): number {
   return okCount === STAGES.length ? STAGES.length : Math.min(okCount, STAGES.length);
 }
 
-// 采集结果后端新增字段（接口类型尚未声明，按可选补充）
-type JobResult = NonNullable<CollectionJob['result']> & { updated?: number; skipped?: number };
+type JobResult = NonNullable<CollectionJob['result']>;
 
 export default function Jobs() {
   const [jobs, setJobs] = useState<CollectionJob[]>([]);
@@ -92,6 +93,13 @@ export default function Jobs() {
 
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
                   <Tag>抓取 {result.fetched ?? '-'}</Tag>
+                  {result.pages_fetched !== undefined && (
+                    // 页数可见性：请求 N 页只抓到 M 页时，用户能一眼看出翻页没生效及原因
+                    <Tag color={result.pagination_unavailable ? 'orange' : 'default'}>
+                      页数 {result.pages_fetched}/{result.pages_requested ?? '-'}
+                      {result.pagination_unavailable ? '（该页无翻页入口）' : ''}
+                    </Tag>
+                  )}
                   <Tag color="green">新增 {result.indexed ?? '-'}</Tag>
                   <Tag color="blue">更新 {result.updated ?? '-'}</Tag>
                   <Tag>跳过 {result.skipped ?? '-'}</Tag>

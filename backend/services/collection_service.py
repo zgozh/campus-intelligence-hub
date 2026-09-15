@@ -6,12 +6,13 @@ REFACTOR_PLAN_V2 T5：时间过滤（since/until/only_new）+ 条数硬上限 + 
 import asyncio
 import logging
 from datetime import date, datetime, timezone
+from urllib.parse import urlparse
 
 from sqlalchemy import select
 
 from collectors.base import SiteAdapter
 from collectors.dedup import content_hash
-from collectors.engine import CrawlEngine
+from collectors.engine import MAX_PAGES_CAP, CrawlEngine
 from collectors.gzhu import GUZhuAdapter
 from collectors.gznews import GUNewsAdapter
 from config import settings
@@ -131,15 +132,38 @@ def _invalidate_column_cache(source_id: str) -> None:
 
 
 def _pick_adapter(source: Source) -> SiteAdapter | None:
-    """根据 base_url 选择站点适配器（EPIC 4 支持 gzhu/gznews）。"""
+    """根据 base_url 的 host 精确选择站点适配器（EPIC 4 支持 gzhu/gznews）。
+
+    历史实现只看域名子串（`"gzhu.edu.cn" in url`），于是 jwc.gzhu.edu.cn 这类**结构完全
+    不同**的子站也被交给"主站首页适配器"，解析出 0 条却记成 SUCCESS。
+    不支持（或结构未知）的站点一律返回 None，由调用方给出明确失败原因。
+    """
     if not source.base_url:
         return None
-    url = source.base_url.lower()
-    if "news.gzhu.edu.cn" in url:
+    host = (urlparse(source.base_url).hostname or "").lower()
+    if host == "news.gzhu.edu.cn":
         return GUNewsAdapter()
-    if "gzhu.edu.cn" in url:
+    if host in ("www.gzhu.edu.cn", "gzhu.edu.cn"):
         return GUZhuAdapter()
     return None
+
+
+def _resolve_max_pages(source: Source, params: dict) -> int:
+    """解析本次采集页数：job.params → source.max_pages → 1。
+
+    0 是合法值（界面的「全部（最多 50 页）」，由引擎解释为 MAX_PAGES_CAP=50），
+    **不能**被 `or 1` 当成 falsy 吃掉 —— 历史实现 `params.get("max_pages", 1) or 1`
+    正是这样把「全部」静默退化成 1 页的。
+    source.max_pages 兜底是为了调度链路（APScheduler 触发时不带 params，此前永远只抓 1 页）。
+    """
+    raw = params.get("max_pages")
+    if raw is None:
+        raw = getattr(source, "max_pages", None)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return 1
+    return value if value >= 0 else 1
 
 
 async def run_collection(job_id: str) -> None:
@@ -169,7 +193,7 @@ async def run_collection(job_id: str) -> None:
                 raise RuntimeError(f"无法识别该 URL 的站点适配器: {source.base_url}")
 
             params = job.params or {}
-            max_pages = params.get("max_pages", 1) or 1
+            max_pages = _resolve_max_pages(source, params)
             column = params.get("column")
             since, until, only_new, max_items = resolve_filter_params(source, params)
 
@@ -182,6 +206,55 @@ async def run_collection(job_id: str) -> None:
                 await engine.close()
 
             fetched = len(articles)
+
+            # 翻页事实留痕（F6）：界面与排查都需要"要了几页 / 实际几页 / 有没有翻页入口"
+            reported_requested = getattr(engine, "pages_requested", None)
+            if reported_requested is None:
+                # 引擎未上报（如测试替身）：按引擎语义自行推导
+                reported_requested = max_pages if max_pages > 0 else MAX_PAGES_CAP
+            pages_requested = int(reported_requested)
+            reported_fetched = getattr(engine, "pages_fetched", None)
+            pages_fetched = (
+                int(reported_fetched) if reported_fetched is not None else (1 if fetched else 0)
+            )
+            pagination_unavailable = bool(getattr(engine, "pagination_unavailable", False))
+            page_facts = {
+                "pages_requested": pages_requested,
+                "pages_fetched": pages_fetched,
+                "pagination_unavailable": pagination_unavailable,
+            }
+            if pagination_unavailable:
+                logger.warning(
+                    "采集 %s：请求 %d 页但只抓到 %d 页 —— 该页面没有「下一页」入口，"
+                    "max_pages 不会生效（常见原因：base_url 填的是站点首页而非栏目列表页）",
+                    source.id,
+                    pages_requested,
+                    pages_fetched,
+                )
+
+            # 抓取 0 条不再静默记成功（F2）：要么 URL 不是列表页、要么适配器与站点结构不匹配、
+            # 要么详情页全被拦（如 URL 拼接丢 host）。此前记 SUCCESS + last_error=None，
+            # 界面上表现为"成功但没数据"，用户完全无从排查。
+            if fetched == 0:
+                job.stage_trace = {**job.stage_trace, "Fetch": "failed", **page_facts}
+                job.result = {
+                    "fetched": 0,
+                    "indexed": 0,
+                    "updated": 0,
+                    "skipped": 0,
+                    "errors": failures[:10],
+                    **page_facts,
+                }
+                if failures:
+                    raise RuntimeError(
+                        f"列表页未解析出任何条目（fetched=0）：{len(failures)} 个详情页抓取失败，"
+                        f"首个错误：{failures[0].get('error')}"
+                    )
+                raise RuntimeError(
+                    "列表页未解析出任何条目（fetched=0）：该 URL 可能不是栏目列表页"
+                    "（站点首页没有文章列表/翻页入口），或站点结构已变化；"
+                    f"请改用栏目列表页 URL，或为该站点新增适配器（当前 base_url={source.base_url}）"
+                )
 
             # 按内容筛选（栏目）过滤采集结果
             if column:
@@ -206,6 +279,7 @@ async def run_collection(job_id: str) -> None:
                 "until": until.isoformat() if until else None,
                 "only_new": only_new,
                 "truncated": truncated,
+                **page_facts,
             }
             await db.commit()
 
@@ -296,6 +370,7 @@ async def run_collection(job_id: str) -> None:
                 "updated": updated,
                 "skipped": skipped,
                 "errors": failures,
+                **page_facts,
             }
             job.completed_at = datetime.now(timezone.utc)
             source.last_success_at = datetime.now(timezone.utc)

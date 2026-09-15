@@ -36,6 +36,12 @@ class CrawlEngine:
         self._interval = max(0, int(getattr(settings, "campus_collect_interval_ms", 0) or 0)) / 1000.0
         self._last_request_at = 0.0
         self._throttle_lock = asyncio.Lock()
+        # 翻页可观测性（本次修复 F6）：上一次 fetch_source 的真实翻页情况。
+        # 为什么需要：数据源填成"首页"时列表页没有翻页入口，max_pages 会**静默失效**，
+        # 界面只能看到条数不变、完全无从判断，因此把三个事实显式暴露出来。
+        self.pages_requested = 0  # 本次请求的页数上限（0 → MAX_PAGES_CAP）
+        self.pages_fetched = 0  # 实际抓取的列表页数
+        self.pagination_unavailable = False  # 还有剩余页数却拿不到下一页（无翻页入口）
 
     def has_seen(self, key: str) -> bool:
         return key in self._seen
@@ -70,8 +76,14 @@ class CrawlEngine:
     async def fetch_source(
         self, list_url: str, adapter: SiteAdapter, max_pages: int = 1
     ) -> tuple[list[RawArticle], list[dict], bool]:
-        """抓取列表页并翻页：返回 (新文章列表, 失败清单, page_capped)。"""
+        """抓取列表页并翻页：返回 (新文章列表, 失败清单, page_capped)。
+
+        翻页事实同时记录在 self.pages_requested / pages_fetched / pagination_unavailable 上。
+        """
         effective_max = max_pages if max_pages > 0 else MAX_PAGES_CAP
+        self.pages_requested = effective_max
+        self.pages_fetched = 0
+        self.pagination_unavailable = False
         articles: list[RawArticle] = []
         failures: list[dict] = []
         sem = asyncio.Semaphore(5)
@@ -121,8 +133,11 @@ class CrawlEngine:
                     page_capped = True
                 break
             if next_url is None:
+                # 还有剩余页数却拿不到下一页：记录事实，避免"页数静默失效"无从排查
+                self.pagination_unavailable = True
                 break
             current_url = next_url
+        self.pages_fetched = page
         return articles, failures, page_capped
 
     async def close(self) -> None:

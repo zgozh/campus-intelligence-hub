@@ -11,8 +11,34 @@ from types import SimpleNamespace
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import database  # noqa: E402
+from collectors.base import RawArticle  # noqa: E402
 from models import CollectionJob, Source  # noqa: E402
+from parser.extract import ParsedArticle  # noqa: E402
 from services import collection_service  # noqa: E402
+
+
+def _fake_raw_article() -> RawArticle:
+    return RawArticle(
+        url="https://www.gzhu.edu.cn/info/1087/38277.htm",
+        title="关于2026年下半年中小学教师资格考试安排的公告",
+        html="<html><body><p>正文</p></body></html>",
+        publish_date="2026-09-08",
+        source_site="gzhu",
+        column="通知公告",
+    )
+
+
+def _fake_extract(raw: RawArticle) -> ParsedArticle:
+    """绕开 trafilatura：单测只关心采集编排，不关心正文抽取质量。"""
+    return ParsedArticle(
+        url=raw.url,
+        title=raw.title,
+        content="校务公告正文内容" * 30,
+        publish_date=raw.publish_date,
+        department="教务处",
+        source_site=raw.source_site,
+        column=raw.column,
+    )
 
 
 class _FakeEngine:
@@ -132,9 +158,15 @@ class TestFilterByPublishRange:
 
 class TestRunCollectionWritesTimeSource:
     async def test_last_crawled_at_written_by_service(self, setup_test_db, monkeypatch):
-        """不经端点（如闭环/调度链路）也必须推进 last_crawled_at —— P3 的核心修复。"""
+        """不经端点（如闭环/调度链路）也必须推进 last_crawled_at —— P3 的核心修复。
+
+        注意：本用例必须真的采到内容。抓 0 条现在是 FAILED（见
+        test_collection_adapter_and_pagination.py::TestZeroItemsIsNotSilentSuccess）。
+        """
         monkeypatch.setattr(collection_service, "AsyncSessionLocal", database.AsyncSessionLocal)
         monkeypatch.setattr(collection_service, "CrawlEngine", _FakeEngine)
+        monkeypatch.setattr(collection_service, "extract_article", _fake_extract)
+        _FakeEngine.articles = [_fake_raw_article()]
 
         async with database.AsyncSessionLocal() as db:
             source = await _make_source(db, "src_loop")
@@ -162,7 +194,7 @@ class TestRunCollectionWritesTimeSource:
             trace = job.stage_trace
             assert trace["Filter"] == "ok"
             assert trace["since"] == "2026-09-01"
-            assert trace["filtered_in"] == 0
+            assert trace["filtered_in"] == 1
             assert "filtered_out" in trace
             assert job.result["truncated"] is False
 
