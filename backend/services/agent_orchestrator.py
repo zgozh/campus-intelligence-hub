@@ -150,11 +150,37 @@ async def _stage_collection(db, config: dict, sink: EventSink) -> dict:
     if source_ids:
         query = query.where(Source.id.in_(source_ids))
     sources = (await db.execute(query)).scalars().all()
-    if not sources:
-        await sink.decision("采集 Agent", "无活跃数据源", "跳过采集", "ok", _ms(started))
-        return {"name": "采集 Agent", "status": "ok", "detail": "无 active 数据源", "jobs": 0}
 
-    from services.collection_service import run_collection
+    # 只挑"真的能采"的源：manual/file 类没有 base_url、未支持站点没有适配器，
+    # 派进闭环必然失败并生成红色失败卡。自动化链路不该产出注定失败的任务；
+    # 这类源仍可在「数据源管理」手动采集，并看到明确原因。
+    from services.collection_service import is_collectible, run_collection
+
+    all_active = sources
+    sources = [src for src in all_active if is_collectible(src)]
+    skipped_uncollectible = len(all_active) - len(sources)
+
+    if not sources:
+        await sink.decision(
+            "采集 Agent",
+            "无可采集的活跃数据源",
+            (
+                f"{skipped_uncollectible} 个活跃源没有可用适配器（manual/无 URL/未支持站点），已跳过"
+                if skipped_uncollectible
+                else "跳过采集"
+            ),
+            "ok",
+            _ms(started),
+        )
+        return {"name": "采集 Agent", "status": "skipped", "detail": "无可采集的活跃数据源", "jobs": 0}
+    if skipped_uncollectible:
+        await sink.decision(
+            "采集 Agent",
+            f"跳过 {skipped_uncollectible} 个不可采集源",
+            "manual/无 URL/未支持站点：没有适配器，采集必然失败",
+            "skip",
+            _ms(started),
+        )
 
     params = _collection_params(config)
     created = ok = failed = 0

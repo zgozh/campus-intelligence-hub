@@ -162,6 +162,16 @@ def _is_homepage_url(url: str | None) -> bool:
     return (urlparse(candidate).path or "/") in ("", "/")
 
 
+def is_collectible(source: Source) -> bool:
+    """该数据源是否**真的能采**：有 base_url 且站点有适配器。
+
+    用途：闭环等自动化链路用它过滤掉"注定失败"的源 —— manual/file 类没有 URL，
+    未支持站点（如 jwc.gzhu.edu.cn）没有适配器，采集必然失败并产出红色失败卡。
+    这类源在「数据源管理」里手动采集仍会得到明确的报错原因（不静默）。
+    """
+    return _pick_adapter(source) is not None
+
+
 def _resolve_max_pages(source: Source, params: dict) -> int:
     """解析本次采集页数：job.params → source.max_pages → 1。
 
