@@ -15,6 +15,9 @@
 #   powershell -File scripts/release_gitee.ps1 -Push -KeepRemoteDocs
 #       文档（README / ARCHITECTURE / DEPLOY-GUIDE）**保持展示仓现有版本不动**，
 #       只把代码更新成开发仓当前状态（适用于"展示仓文档已人工精简、不想被覆盖"）。
+#   powershell -File scripts/release_gitee.ps1 -Push -DocsFromDir <目录>
+#       文档取自本地目录（目录内放 README.md / ARCHITECTURE.md / DEPLOY-GUIDE.md），
+#       用于"要在展示仓文档上做一处修正、其余保持"的场景。
 #
 # 为什么用「导出 + 全新 git init + 单 commit + force push」而不是 .gitignore：
 #   .gitignore 只对「未跟踪文件」生效，对已跟踪的开发文档无效；且同一份 .gitignore
@@ -26,7 +29,10 @@ param(
   [string]$Remote = "origin",
   [switch]$Cleanup,
   # 文档以展示仓现有版本为准（只更新代码）；不传则文档从开发仓导出并做死链改写
-  [switch]$KeepRemoteDocs
+  [switch]$KeepRemoteDocs,
+  # 文档从本地目录取（目录内需有 README.md / ARCHITECTURE.md / DEPLOY-GUIDE.md）。
+  # 用于"展示仓文档要改一处、其余保持"的场景；与 -KeepRemoteDocs 互斥。
+  [string]$DocsFromDir = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -126,8 +132,12 @@ try {
   }
   Write-Host ("  [OK] 导出源：HEAD = " + $head + "（工作区已跟踪文件干净）") -ForegroundColor Green
 
-  # 文档以展示仓为准时，先解析远端 tip（后面对这 3 个文档做逐字节校验）
+  # 文档来源三选一：展示仓现有版本 / 本地目录 / 开发仓（默认，含死链改写）
+  if ($KeepRemoteDocs -and $DocsFromDir) {
+    throw "参数冲突：-KeepRemoteDocs 与 -DocsFromDir 只能二选一"
+  }
   $remoteTip = ""
+  $docsFromDirAbs = ""
   if ($KeepRemoteDocs) {
     Invoke-Git @("fetch", $Remote, "master") | Out-Null
     $remoteTip = (Invoke-Git @("rev-parse", ($Remote + "/master")) | Select-Object -First 1)
@@ -139,6 +149,16 @@ try {
       }
     }
     Write-Host ("  [OK] 文档来源：展示仓 " + $Remote + "/master = " + $remoteTip + "（README / ARCHITECTURE / DEPLOY-GUIDE 保持不动）") -ForegroundColor Yellow
+  }
+  if ($DocsFromDir) {
+    if (-not (Test-Path $DocsFromDir)) { throw ("-DocsFromDir 目录不存在：" + $DocsFromDir) }
+    $docsFromDirAbs = (Resolve-Path $DocsFromDir).Path
+    foreach ($doc in $keepRootDocs) {
+      if (-not (Test-Path (Join-Path $docsFromDirAbs $doc))) {
+        throw ("-DocsFromDir 目录缺少文档：" + $doc + "（目录：" + $docsFromDirAbs + "）")
+      }
+    }
+    Write-Host ("  [OK] 文档来源：本地目录 " + $docsFromDirAbs + "（逐字节复制，不做改写）") -ForegroundColor Yellow
   }
 
   Write-Host "`n=== 2) 导出可运行内容到临时目录 ===" -ForegroundColor Cyan
@@ -183,6 +203,15 @@ try {
       Write-Host ("  [OK] 保持展示仓版本：" + $doc + "（blob " + $gotHash.Substring(0, 8) + "）") -ForegroundColor Green
     }
     Write-Host "  [OK] 未对文档做任何改写（KeepRemoteDocs）" -ForegroundColor Green
+  } elseif ($DocsFromDir) {
+    # 文档取自本地目录：逐字节复制（含 blob 指纹回显，便于与开发仓版本对照），不做改写
+    foreach ($doc in $keepRootDocs) {
+      $src = Join-Path $docsFromDirAbs $doc
+      $dest = Join-Path $out $doc
+      Copy-Item -LiteralPath $src -Destination $dest -Force
+      $hash = (Invoke-Git @("hash-object", "--path", $doc, $dest) | Select-Object -First 1)
+      Write-Host ("  [OK] 取自本地目录：" + $doc + "（blob " + $hash.Substring(0, 8) + "）") -ForegroundColor Green
+    }
   } else {
   $rows = Remove-DocTableRows (Join-Path $out "README.md") $excludedDocNames
   Write-Host ("  [OK] README.md 删除导航表行 " + $rows + " 行") -ForegroundColor Green
