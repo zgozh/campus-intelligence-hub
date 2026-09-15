@@ -10,8 +10,10 @@
  * 【判定口径 · 写死】弹层/面板算「可见」必须**同时**满足三条（见 lib/cdp.mjs: visibilityExpr）：
  *   1) getComputedStyle(el).display !== "none"
  *   2) getBoundingClientRect() 宽高均 > 0
- *   3) 与视口交集足够：可见高度占比 > 0.5
+ *   3) 与视口交集足够：可见高度占比 > 0.5 **且可见宽度占比 > 0.5**
  *      可见高度 = min(rect.bottom, innerHeight) - max(rect.top, 0)；占比 = 可见高度 / rect.height
+ *      可见宽度同理（min(rect.right, innerWidth) - max(rect.left, 0)）
+ *      两个方向都要判：横向跑到视口外的元素垂直占比仍可能是 1.0（本项目踩过 left=-13420px 的假通过）
  *   第 3 条是 jsdom 结构性测不出来的一维（jsdom 无布局、无视口、无定位计算）。
  *
  * 【交互口径】触发交互一律用 Input.dispatchMouseEvent 真实鼠标事件（走命中测试，能发现遮挡）；
@@ -201,7 +203,7 @@ function assertVisible(ctx, vis, label) {
     throw new StepFailure(
       `${label} 未通过可见性三口径：${vis.reason}；` +
         `display=${vis.display} rect=${r.w}x${r.h}@(${r.x},${r.y}) 视口=${vis.viewport} ` +
-        `可见比例=${vis.visibleHeightRatio}（阈值 >${VISIBLE_MIN_RATIO}）`,
+        `可见比例 水平=${vis.visibleWidthRatio} 垂直=${vis.visibleHeightRatio}（阈值 >${VISIBLE_MIN_RATIO}）`,
     );
   }
 }
@@ -730,12 +732,76 @@ const scenarioSelftest = {
   },
 };
 
+/**
+ * 数据源「删除」确认弹层（回归护栏）：本场景只**打开确认框 → 点取消**，不删任何数据。
+ *
+ * 来历：删除按钮曾因 antd 基于锚点定位的浮层算出错误水平偏移（实测 left=-13420px，
+ * 整块跑到视口外）而表现为「点了没反应」；改用居中 Modal 后修复。
+ * 当时的探针之所以误判 PASS，是因为可见性口径只算了垂直交集 —— 现已补上水平方向，
+ * 本场景因此能真正拦住这类"浮层跑到视口外"的回归。
+ */
+const scenarioSourcesDeleteConfirm = {
+  name: "sources-delete-confirm",
+  desc: "数据源「删除」确认弹层：真实点击可打开、双向都在视口内可见、可取消（不删数据）",
+  route: "/sources",
+  needsAuth: true,
+  async run(ctx) {
+    const b = ctx.browser;
+    await runSteps(ctx, [
+      {
+        desc: "进入 /sources 并等表格渲染",
+        fn: () => gotoReady(ctx, "/sources", { readySelector: ".ant-table" }),
+      },
+      {
+        desc: "断言至少存在一个数据源（否则无法测试删除确认）",
+        fn: async () => {
+          const rows = await b.count(".ant-table-tbody tr");
+          ctx.note("rows", rows);
+          ctx.assert(rows > 0, "当前没有任何数据源，无法验证删除确认弹层（先添加一个数据源）");
+        },
+      },
+      {
+        desc: "用真实鼠标事件点击第一行的「删除」按钮",
+        fn: async () => {
+          const r = await b.clickByText("删除", { tag: "button" });
+          ctx.note("click:delete", { ok: r.ok, warn: r.warn, candidates: r.candidates });
+          ctx.assert(r.ok, `点击「删除」失败：${r.warn}`);
+        },
+      },
+      {
+        desc: "断言确认弹层已打开，且水平+垂直都在视口内可见",
+        fn: async () => {
+          const vis = await b.waitForVisible(".ant-modal-confirm", { timeout: 10_000 });
+          assertVisible(ctx, vis, "删除确认弹层");
+        },
+      },
+      {
+        desc: "点击「取消」关闭弹层（本场景不执行删除）",
+        fn: async () => {
+          const r = await b.clickByText("取消", { tag: "button" });
+          ctx.note("click:cancel", { ok: r.ok, warn: r.warn });
+          ctx.assert(r.ok, `点击「取消」失败：${r.warn}`);
+          const closed = await b.waitForFunction(
+            `(() => { const m = document.querySelector('.ant-modal-confirm');
+                      if (!m) return true;
+                      const cs = getComputedStyle(m);
+                      return cs.display === 'none' || cs.visibility === 'hidden' || !m.offsetParent; })()`,
+            { timeout: 8_000, desc: "确认弹层关闭" },
+          );
+          ctx.assert(closed.ok, "点击取消后确认弹层未关闭");
+        },
+      },
+    ]);
+  },
+};
+
 const ALL_SCENARIOS = [
   scenarioNotificationsDrawer,
   scenarioCollectionModal,
   scenarioClosedLoopConfig,
   scenarioNotificationsTabs,
   scenarioRunTimeline,
+  scenarioSourcesDeleteConfirm,
   scenarioBuildConsistency,
   scenarioSelftest,
 ];
@@ -768,7 +834,7 @@ async function main() {
   log("============================================================");
   log(`真实浏览器场景运行器  ${SELFTEST ? "【自检模式】" : ""}`);
   log(`前端 ${BASE}   后端 ${API}   窗口 ${WINDOW}${HEADED ? " (headed)" : " (headless)"}`);
-  log(`可见性口径：display!=none 且 宽高>0 且 可见高度占比>${VISIBLE_MIN_RATIO}（三条同时满足）`);
+  log(`可见性口径：display!=none 且 宽高>0 且 可见高度占比与可见宽度占比都>${VISIBLE_MIN_RATIO}（三条同时满足）`);
   log(`证据目录：${EVIDENCE_DIR}`);
   log("============================================================");
 

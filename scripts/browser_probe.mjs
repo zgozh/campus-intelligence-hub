@@ -39,7 +39,7 @@
  */
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { launchBrowser, apiLogin, parseArgs, sleep, VISIBLE_MIN_RATIO } from "./lib/cdp.mjs";
+import { launchBrowser, apiLogin, parseArgs, sleep } from "./lib/cdp.mjs";
 
 const args = parseArgs();
 
@@ -77,7 +77,10 @@ function toOpenState(vis) {
     viewport: vis.viewport,
     clippedTop: vis.clippedTop,
     clippedBottom: vis.clippedBottom,
+    clippedLeft: vis.clippedLeft,
+    clippedRight: vis.clippedRight,
     visibleHeightRatio: vis.visibleHeightRatio,
+    visibleWidthRatio: vis.visibleWidthRatio,
     // 新增（同口径）：三条口径是否同时满足 —— 与 browser_smoke.mjs 完全一致
     visibleByRule: vis.visible,
     rule: vis.rule,
@@ -162,7 +165,7 @@ async function main() {
     // 2b) 若点开后不可见，强制触发一次 resize（rc-align 会在 resize 时重新对齐）。
     // 作用：区分"对齐算不出来"与"对齐算得出来但打开时没被应用"（受控 open 竞态）。
     let afterResize = null;
-    if (realFirst && realFirst.open && realFirst.visibleHeightRatio === 0) {
+    if (realFirst && realFirst.open && (realFirst.visibleHeightRatio === 0 || realFirst.visibleWidthRatio === 0)) {
       await browser.nudgeResize();
       afterResize = toOpenState(await browser.isVisiblyOpen(EXPECT));
     }
@@ -197,17 +200,17 @@ async function main() {
         ? `FAIL：元素被遮挡，命中测试落在 ${element.hitTestTag}`
         : element.disabled
           ? "FAIL：元素处于禁用态"
-          : realFirst.open && realFirst.visibleHeightRatio > VISIBLE_MIN_RATIO
+          : realFirst.open && realFirst.visibleByRule
             ? "PASS：真实鼠标点击可打开且面板在视口内可见（用户点得开、看得见）"
             : realFirst.open
-              ? `FAIL：面板已打开但几乎不可见（rect.y=${realFirst.y}，可见比例=${realFirst.visibleHeightRatio}）——定位/滚动容器问题，用户表现为"点了没反应"`
+              ? `FAIL：面板已打开但几乎不可见（rect=${realFirst.x},${realFirst.y} ${realFirst.w}x${realFirst.h}；可见比例 水平=${realFirst.visibleWidthRatio} 垂直=${realFirst.visibleHeightRatio}）——定位/滚动容器问题，用户表现为"点了没反应"`
               : synthState.open
                 ? "FAIL：合成 click 能打开、真实鼠标不能 —— 事件被拦截/未冒泡（pointer-events、父级吞事件、遮罩）"
                 : collected.exceptions.length
                   ? "FAIL：点击无效且页面有运行时异常（疑似 hydration/渲染失败）"
                   : "FAIL：点击后受控 open 未更新（事件处理器未挂载或状态逻辑错误）";
     console.log("\n[VERDICT] " + verdict);
-    process.exitCode = realFirst.open && realFirst.visibleHeightRatio > VISIBLE_MIN_RATIO ? 0 : 1;
+    process.exitCode = realFirst.open && realFirst.visibleByRule ? 0 : 1;
   } finally {
     await browser.close();
   }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { ComponentProps, ReactElement } from 'react';
-import { Button, Card, Checkbox, DatePicker, Form, Input, InputNumber, Modal, Popconfirm, Radio, Select, Space, Table, Tag, Tooltip, Typography, message } from 'antd';
+import { Button, Card, Checkbox, DatePicker, Form, Input, InputNumber, Modal, Radio, Select, Space, Table, Tag, Tooltip, Typography, message } from 'antd';
 import { CompassOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { api } from '../services/api';
 import type { BriefResult, CampusSource, RecommendResult, SourceColumn, SourceMonitor } from '../services/api';
@@ -284,19 +284,32 @@ export default function Sources() {
     }
   };
 
-  const onDelete = async (id: string) => {
-    try {
-      const r = await api.deleteSource(id);
-      const c = r.cascade || {};
-      message.success(
-        `已删除（同时清理：文档 ${c.raw_documents ?? 0} · 知识对象 ${c.knowledge_objects ?? 0} · 采集任务 ${c.collection_jobs ?? 0}）`,
-      );
-      await load();
-    } catch (e) {
-      // 历史 bug：这里原本没有 try/catch —— 后端 500（被外键挡住）时界面毫无提示，
-      // 用户看到的就是"删除按钮点了没反应"。失败必须把原因说出来。
-      message.error(`删除失败：${(e as Error)?.message || '未知错误'}`);
-    }
+  const onDelete = (record: CampusSource) => {
+    // 为什么不用 Popconfirm：antd 基于锚点定位的浮层在本项目环境里会算出错误的水平偏移
+    // （实测被放到 left=-13420px，整块跑到视口外，用户表现为"点删除没反应"；强制 resize
+    // 也无法自我纠正）。项目此前踩过同类问题（右上角通知 Popover），结论一致：
+    // 关键交互不要依赖锚点浮层，改用居中 Modal（纯 flex 居中，不依赖 rc-align）。
+    Modal.confirm({
+      title: '确认删除该数据源？',
+      content: `「${record.name}」及其采集文档、知识对象、采集任务与变更记录会被一并清除，且不可恢复。`,
+      okText: '删除',
+      okButtonProps: { danger: true },
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          const r = await api.deleteSource(record.id);
+          const c = r.cascade || {};
+          message.success(
+            `已删除（同时清理：文档 ${c.raw_documents ?? 0} · 知识对象 ${c.knowledge_objects ?? 0} · 采集任务 ${c.collection_jobs ?? 0}）`,
+          );
+          await load();
+        } catch (e) {
+          // 后端失败必须说出来：历史 bug 里这里没有 try/catch，500 被静默吞掉，
+          // 用户看到的就是"删除按钮点了没反应"。
+          message.error(`删除失败：${(e as Error)?.message || '未知错误'}`);
+        }
+      },
+    });
   };
 
   const runDiscover = async () => {
@@ -362,9 +375,7 @@ export default function Sources() {
       render: (_: unknown, record: CampusSource) => (
         <Space>
           <Button size="small" type="primary" onClick={() => openRun(record)}>采集</Button>
-          <Popconfirm title="确认删除该数据源？" onConfirm={() => onDelete(record.id)}>
-            <Button size="small" danger>删除</Button>
-          </Popconfirm>
+          <Button size="small" danger onClick={() => onDelete(record)}>删除</Button>
         </Space>
       ),
     },

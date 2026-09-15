@@ -11,9 +11,13 @@
  *     1) getComputedStyle(el).display !== "none"
  *     2) el.getBoundingClientRect() 的宽、高均 > 0
  *     3) 与视口有足够交集：可见高度占比 > VISIBLE_MIN_RATIO(0.5)
+ *        **且**可见宽度占比 > VISIBLE_MIN_RATIO(0.5)
  *        可见高度 = min(rect.bottom, innerHeight) - max(rect.top, 0)
- *        可见比例 = 可见高度 / rect.height
+ *        可见宽度 = min(rect.right, innerWidth) - max(rect.left, 0)
  *   第 3 条是 jsdom 永远测不出来的那一维（jsdom 无布局、无视口、无定位计算）。
+ *   ⚠️ 必须**两个方向都判**：本项目两次踩到"弹层被定位到视口外"（右上角通知 Popover
+ *   被放到 top=-1000×视口高；数据源删除 Popconfirm 被放到 left=-13420px）。
+ *   只判高度时，横向跑到视口外一万像素的元素垂直占比仍是 1.0 → 判定 PASS = 假通过。
  *   补充诊断（不参与判定，只进证据）：visibility / opacity / 命中测试结果。
  *
  * 【交互口径】
@@ -235,13 +239,17 @@ export function visibilityExpr(selector, minRatio = VISIBLE_MIN_RATIO) {
   const displayOk = cs.display !== 'none';
   // —— 口径第 2 条：宽高均 > 0
   const sizeOk = r.width > 0 && r.height > 0;
-  // —— 口径第 3 条：与视口交集足够（可见高度占比 > 0.5）
+  // —— 口径第 3 条：与视口交集足够（可见高度占比与**可见宽度占比**都要 > 0.5）
+  // 为什么必须两个方向都判：本项目两次踩到"弹层被定位到视口外"（铃铛 Popover、数据源删除
+  // Popconfirm 被放到 left=-13420px）。只判高度时，一个横向跑到视口外一万像素的元素
+  // 垂直占比仍是 1.0 → 判定 PASS，探针给出假通过。故补上水平方向。
   const visibleTop = Math.max(r.top, 0);
   const visibleBottom = Math.min(r.bottom, vh);
   const visibleHeight = Math.max(0, visibleBottom - visibleTop);
   const visibleWidth = Math.max(0, Math.min(r.right, vw) - Math.max(r.left, 0));
   const visibleHeightRatio = r.height > 0 ? visibleHeight / r.height : 0;
-  const inViewportOk = visibleHeightRatio > MIN_RATIO;
+  const visibleWidthRatio = r.width > 0 ? visibleWidth / r.width : 0;
+  const inViewportOk = visibleHeightRatio > MIN_RATIO && visibleWidthRatio > MIN_RATIO;
   const visible = displayOk && sizeOk && inViewportOk;
 
   // 诊断（不参与判定）
@@ -253,19 +261,25 @@ export function visibilityExpr(selector, minRatio = VISIBLE_MIN_RATIO) {
     found: true,
     visible,
     // 三条口径的逐条结果（证据里必须能一眼看出是哪条挂了）
-    rule: { displayOk, sizeOk, inViewportOk, minRatio: MIN_RATIO },
+    rule: { displayOk, sizeOk, inViewportOk, minRatio: MIN_RATIO, visibleHeightRatio: Number(visibleHeightRatio.toFixed(3)), visibleWidthRatio: Number(visibleWidthRatio.toFixed(3)) },
     reason: visible ? '三条口径全部满足'
       : !displayOk ? 'display:none'
       : !sizeOk ? '宽高为 0'
-      : '与视口交集不足（可见高度占比 ' + visibleHeightRatio.toFixed(2) + ' <= ' + MIN_RATIO + '）',
+      : visibleHeightRatio <= MIN_RATIO
+        ? '与视口交集不足（可见高度占比 ' + visibleHeightRatio.toFixed(2) + ' <= ' + MIN_RATIO + '）'
+        : '与视口交集不足（可见宽度占比 ' + visibleWidthRatio.toFixed(2) + ' <= ' + MIN_RATIO + '，元素在视口左右之外）',
     rect: { x: Math.round(r.left), y: Math.round(r.top),
             w: Math.round(r.width), h: Math.round(r.height),
             right: Math.round(r.right), bottom: Math.round(r.bottom) },
     viewport: vw + 'x' + vh,
     visibleHeightRatio: Number(visibleHeightRatio.toFixed(3)),
+    visibleWidthRatio: Number(visibleWidthRatio.toFixed(3)),
     visibleHeight: Math.round(visibleHeight),
+    visibleWidth: Math.round(visibleWidth),
     clippedTop: Math.round(Math.max(0, -r.top)),
     clippedBottom: Math.round(Math.max(0, r.bottom - vh)),
+    clippedLeft: Math.round(Math.max(0, -r.left)),
+    clippedRight: Math.round(Math.max(0, r.right - vw)),
     // 诊断字段
     display: cs.display, visibility: cs.visibility, opacity: cs.opacity,
     position: cs.position, top: cs.top, left: cs.left, transform: cs.transform,
