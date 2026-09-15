@@ -361,3 +361,42 @@ class TestZeroItemsIsNotSilentSuccess:
         assert job.stage_trace["pages_requested"] == 5
         assert job.stage_trace["pages_fetched"] == 1  # 替身引擎无 pages_fetched 时按 1 记录
         assert "pages_fetched" in job.result
+
+
+# ─────────────────────── 首页源：不阻断，但显著标注 ───────────────────────
+
+
+class TestHomepageSourceIsFlagged:
+    """首页不是列表页：实测 1 页解析出 55 条、其中 34 条来自另一个站点。
+
+    决策（用户拍板）：**不强拦**（首页作为概览入口仍有价值），但必须让界面显著可见。
+    """
+
+    def test_homepage_detection(self):
+        assert collection_service._is_homepage_url("https://www.gzhu.edu.cn") is True
+        assert collection_service._is_homepage_url("https://www.gzhu.edu.cn/") is True
+        assert collection_service._is_homepage_url("www.gzhu.edu.cn") is True
+        assert collection_service._is_homepage_url("https://www.gzhu.edu.cn/z__l/tzgg.htm") is False
+        assert collection_service._is_homepage_url("https://jwc.gzhu.edu.cn/index.htm") is False
+        assert collection_service._is_homepage_url(None) is False
+        assert collection_service._is_homepage_url("") is False
+
+    async def test_homepage_flagged_but_still_succeeds(self, setup_test_db, monkeypatch):
+        job, _src = await _run(
+            lambda db, **kw: _make_source(db, "src_hp", **kw),
+            monkeypatch,
+            articles=[_article()],
+            base_url="https://www.gzhu.edu.cn",
+        )
+        assert job.status == "SUCCESS", "首页源不应被阻断"
+        assert job.result["homepage_source"] is True
+        assert job.stage_trace["homepage_source"] is True
+
+    async def test_list_page_not_flagged(self, setup_test_db, monkeypatch):
+        job, _src = await _run(
+            lambda db, **kw: _make_source(db, "src_lp", **kw),
+            monkeypatch,
+            articles=[_article()],
+            base_url="https://www.gzhu.edu.cn/z__l/tzgg.htm",
+        )
+        assert job.result["homepage_source"] is False

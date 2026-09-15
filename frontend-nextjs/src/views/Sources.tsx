@@ -73,6 +73,15 @@ const PAGE_OPTIONS = [
   { value: 0, label: '全部（最多 50 页）' },
 ];
 
+/** 站点首页判定：URL 无路径（或仅 "/"）→ 它是首页而非栏目列表页。
+ *  首页把各板块文章铺在一屏上，采出来会跨栏目/跨站点，且没有「下一页」→ 页数档位无效。 */
+function isHomepageUrl(url?: string | null): boolean {
+  if (!url) return false;
+  return /^https?:\/\/[^/]+\/?$/i.test(url.trim());
+}
+
+const HOMEPAGE_HINT = '这是站点首页，不是栏目列表页：1 页 = 首页所有板块的文章（跨栏目甚至跨站点），且页数档位无效。建议改成具体栏目列表页 URL，例如 https://www.gzhu.edu.cn/z__l/tzgg.htm';
+
 const valueColor: Record<string, string> = { high: 'red', medium: 'orange', low: 'default' };
 const valueZh: Record<string, string> = { high: '高价值', medium: '一般', low: '低价值' };
 
@@ -314,7 +323,20 @@ export default function Sources() {
   };
 
   const columns = [
-    { title: '名称', dataIndex: 'name' },
+    {
+      title: '名称',
+      dataIndex: 'name',
+      render: (name: string, record: CampusSource) => (
+        <Space size={4}>
+          <span>{name}</span>
+          {isHomepageUrl(record.base_url) && (
+            <Tooltip title={HOMEPAGE_HINT}>
+              <Tag color="red">首页源</Tag>
+            </Tooltip>
+          )}
+        </Space>
+      ),
+    },
     { title: '类型', dataIndex: 'source_type', width: 110 },
     {
       title: '状态',
@@ -478,6 +500,9 @@ export default function Sources() {
         <div style={{ marginBottom: 16, padding: '8px 12px', background: '#fafafa', borderRadius: 6, fontSize: 13 }}>
           <div><b>{runSource?.name}</b> <span style={{ color: '#888', fontSize: 12 }}>{runSource?.source_type}</span></div>
           <div style={{ color: '#888', fontSize: 12, wordBreak: 'break-all' }}>{runSource?.base_url || '-'}</div>
+          {isHomepageUrl(runSource?.base_url) && (
+            <div style={{ color: '#ff4d4f', fontSize: 12, marginTop: 4 }}>⚠ {HOMEPAGE_HINT}</div>
+          )}
         </div>
         <div style={{ marginBottom: 20 }}>
           <div style={{ marginBottom: 8, fontWeight: 600 }}>采集页数档位</div>

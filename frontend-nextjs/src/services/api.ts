@@ -1602,6 +1602,8 @@ export interface CollectionJob {
 		pages_fetched?: number;
 		/** true = 还有剩余页数但页面没有「下一页」入口（典型：base_url 填的是站点首页） */
 		pagination_unavailable?: boolean;
+		/** true = base_url 是站点首页而非栏目列表页：结果会跨栏目/跨站点，且页数档位无效 */
+		homepage_source?: boolean;
 	} | null;
 	error_message?: string | null;
 	created_at: string;

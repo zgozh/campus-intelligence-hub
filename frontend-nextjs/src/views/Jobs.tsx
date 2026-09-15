@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Card, Col, Row, Space, Steps, Tag, Typography, Empty } from 'antd';
+import { Card, Col, Row, Space, Steps, Tag, Tooltip, Typography, Empty } from 'antd';
 import { ClockCircleOutlined, SyncOutlined } from '@ant-design/icons';
 import { api } from '../services/api';
 import type { CollectionJob } from '../services/api';
@@ -99,6 +99,11 @@ export default function Jobs() {
                       页数 {result.pages_fetched}/{result.pages_requested ?? '-'}
                       {result.pagination_unavailable ? '（该页无翻页入口）' : ''}
                     </Tag>
+                  )}
+                  {result.homepage_source && (
+                    <Tooltip title="base_url 是站点首页而非栏目列表页：1 页 = 首页所有板块的文章，结果会跨栏目甚至跨站点，且页数档位无效。建议改成具体栏目列表页 URL（如 /z__l/tzgg.htm）">
+                      <Tag color="red">首页源·结果跨栏目/跨站点</Tag>
+                    </Tooltip>
                   )}
                   <Tag color="green">新增 {result.indexed ?? '-'}</Tag>
                   <Tag color="blue">更新 {result.updated ?? '-'}</Tag>

@@ -148,6 +148,20 @@ def _pick_adapter(source: Source) -> SiteAdapter | None:
     return None
 
 
+def _is_homepage_url(url: str | None) -> bool:
+    """站点首页判定：URL 路径为空或仅 "/"。
+
+    首页**不是列表页**：它把各板块文章链接铺在一屏上，采集结果会跨栏目、甚至跨站点
+    （实测 www.gzhu.edu.cn 首页 1 页解析出 55 条，其中 34 条实际来自 news.gzhu.edu.cn），
+    而且没有「下一页」入口 → max_pages 对它无效。
+    这里只做判定并告警，不阻断（首页作为概览入口仍有价值）。
+    """
+    if not url:
+        return False
+    candidate = url if "://" in url else f"http://{url}"
+    return (urlparse(candidate).path or "/") in ("", "/")
+
+
 def _resolve_max_pages(source: Source, params: dict) -> int:
     """解析本次采集页数：job.params → source.max_pages → 1。
 
@@ -218,11 +232,20 @@ async def run_collection(job_id: str) -> None:
                 int(reported_fetched) if reported_fetched is not None else (1 if fetched else 0)
             )
             pagination_unavailable = bool(getattr(engine, "pagination_unavailable", False))
+            homepage_source = _is_homepage_url(source.base_url)
             page_facts = {
                 "pages_requested": pages_requested,
                 "pages_fetched": pages_fetched,
                 "pagination_unavailable": pagination_unavailable,
+                "homepage_source": homepage_source,
             }
+            if homepage_source:
+                logger.warning(
+                    "采集 %s：base_url 是站点首页（%s）—— 首页不是列表页，结果会跨栏目/跨站点，"
+                    "且没有翻页入口（max_pages 无效）；建议改用具体栏目列表页 URL",
+                    source.id,
+                    source.base_url,
+                )
             if pagination_unavailable:
                 logger.warning(
                     "采集 %s：请求 %d 页但只抓到 %d 页 —— 该页面没有「下一页」入口，"
