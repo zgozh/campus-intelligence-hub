@@ -383,12 +383,19 @@ async def delete_source(
     current_user: AdminUser = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    source = await db.get(Source, source_id)
-    if not source:
+    """删除数据源（级联清理其文档/任务/变更/知识对象/审核任务 + 向量）。
+
+    为什么不能直接 db.delete(source)：sources 被 change_events / collection_jobs /
+    raw_documents 三张表以 NO ACTION 外键引用（raw_documents 又被 knowledge_objects
+    引用、knowledge_objects 又被 review_tasks 引用），直接删父行会被外键挡住并返回 500
+    —— 历史表现就是"删除按钮点了没反应"。级联顺序见 services/source_service.py。
+    """
+    from services.source_service import delete_source_cascade
+
+    counts = await delete_source_cascade(db, source_id)
+    if counts is None:
         raise HTTPException(status_code=404, detail="数据源不存在")
-    await db.delete(source)
-    await db.commit()
-    return {"deleted": True}
+    return {"deleted": True, "cascade": counts}
 
 
 @router.post("/sources/{source_id}/run", response_model=SourceRunResponse)
@@ -449,21 +456,6 @@ async def run_source(
 
     background_tasks.add_task(run_collection, job.id)
     return SourceRunResponse(job_id=job.id, status="PENDING")
-
-
-@router.post("/sources/{source_id}/pause", response_model=SourceItem)
-async def pause_source(
-    source_id: str,
-    current_user: AdminUser = Depends(get_current_admin),
-    db: AsyncSession = Depends(get_db),
-):
-    source = await db.get(Source, source_id)
-    if not source:
-        raise HTTPException(status_code=404, detail="数据源不存在")
-    source.status = "paused"
-    await db.commit()
-    await db.refresh(source)
-    return source
 
 
 # ========== CollectionJob ==========

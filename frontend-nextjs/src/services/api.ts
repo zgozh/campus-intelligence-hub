@@ -1214,7 +1214,7 @@ class APIService {
 		});
 	}
 
-	async deleteSource(id: string): Promise<{ deleted: boolean }> {
+	async deleteSource(id: string): Promise<{ deleted: boolean; cascade?: Record<string, number> }> {
 		return this.request(`/api/v1/sources/${id}`, { method: "DELETE" });
 	}
 
@@ -1237,10 +1237,6 @@ class APIService {
 		if (extra.maxItems !== undefined) params.set("max_items", String(extra.maxItems));
 		const q = params.toString() ? `?${params.toString()}` : "";
 		return this.request(`/api/v1/sources/${id}/run${q}`, { method: "POST" });
-	}
-
-	async pauseSource(id: string): Promise<CampusSource> {
-		return this.request(`/api/v1/sources/${id}/pause`, { method: "POST" });
 	}
 
 	async listJobs(sourceId?: string): Promise<{ jobs: CollectionJob[]; total: number }> {

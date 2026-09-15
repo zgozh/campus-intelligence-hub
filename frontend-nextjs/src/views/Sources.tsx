@@ -284,14 +284,19 @@ export default function Sources() {
     }
   };
 
-  const onPause = async (id: string) => {
-    await api.pauseSource(id);
-    await load();
-  };
   const onDelete = async (id: string) => {
-    await api.deleteSource(id);
-    message.success('已删除');
-    await load();
+    try {
+      const r = await api.deleteSource(id);
+      const c = r.cascade || {};
+      message.success(
+        `已删除（同时清理：文档 ${c.raw_documents ?? 0} · 知识对象 ${c.knowledge_objects ?? 0} · 采集任务 ${c.collection_jobs ?? 0}）`,
+      );
+      await load();
+    } catch (e) {
+      // 历史 bug：这里原本没有 try/catch —— 后端 500（被外键挡住）时界面毫无提示，
+      // 用户看到的就是"删除按钮点了没反应"。失败必须把原因说出来。
+      message.error(`删除失败：${(e as Error)?.message || '未知错误'}`);
+    }
   };
 
   const runDiscover = async () => {
@@ -357,7 +362,6 @@ export default function Sources() {
       render: (_: unknown, record: CampusSource) => (
         <Space>
           <Button size="small" type="primary" onClick={() => openRun(record)}>采集</Button>
-          <Button size="small" onClick={() => onPause(record.id)}>暂停</Button>
           <Popconfirm title="确认删除该数据源？" onConfirm={() => onDelete(record.id)}>
             <Button size="small" danger>删除</Button>
           </Popconfirm>

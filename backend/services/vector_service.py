@@ -39,6 +39,22 @@ async def upsert_ko(ko_id: str, embedding: list[float], payload: dict) -> None:
             logger.warning("Qdrant upsert 失败: %s %s", resp.status_code, resp.text[:200])
 
 
+async def delete_by_ko_ids(ko_ids: list[str]) -> None:
+    """按 payload.ko_id 删除向量（数据源/知识对象被删除时的向量清理；失败仅告警）。
+
+    向量 point 的 id 是随机 UUID、ko_id 存在 payload 里，所以只能按 payload 过滤删。
+    """
+    if not ko_ids:
+        return
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(
+            f"{settings.qdrant_url}/collections/{COLLECTION}/points/delete?wait=true",
+            json={"filter": {"must": [{"key": "ko_id", "match": {"any": ko_ids}}]}},
+        )
+        if resp.status_code != 200:
+            logger.warning("Qdrant 向量删除失败: %s %s", resp.status_code, resp.text[:200])
+
+
 async def search(query_embedding: list[float], top_k: int = 5) -> list[str]:
     """语义检索，返回 KO id 列表；失败返回空。"""
     async with httpx.AsyncClient(timeout=10) as client:
